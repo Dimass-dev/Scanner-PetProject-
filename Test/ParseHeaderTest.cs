@@ -7,15 +7,15 @@ public class ParseHeaderTest
     {
         var parser = new HeaderParser();
         string systemExePath = @"C:\Windows\System32\cmd.exe";
-        bool result = parser.CheckDOSHeader(systemExePath);
-        Assert.True(result);
+        int result = parser.CheckDOSHeader(systemExePath);
+        Assert.True(result > 64);
     }
     [Fact]
     public void CheckParseHeader_EXE_False()
     {
         var parser = new HeaderParser();
         string systemExePath = @"C:\Windows\hzbrat\cmd.exe";
-        bool result = parser.CheckDOSHeader(systemExePath);
-        Assert.False(result);
+        int result = parser.CheckDOSHeader(systemExePath);
+        Assert.Equal(-1,result);
     }
 }
