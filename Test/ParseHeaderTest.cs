@@ -1,21 +1,38 @@
 ﻿using Core.PE;
+using Xunit;
+
 namespace Test;
-public class ParseHeaderTest
+
+public class HeaderParserTests
 {
     [Fact]
-    public void CheckParseHeader_EXE_True()
+    public void Parse_ValidExe_ReturnsSuccessWithValidOffset()
     {
         var parser = new HeaderParser();
-        string systemExePath = @"C:\Windows\System32\cmd.exe";
-        int result = parser.CheckDOSHeader(systemExePath);
-        Assert.True(result > 64);
+        string systemExe = @"C:\Windows\System32\cmd.exe";
+        var result = parser.Parse(systemExe);
+        Assert.True(result.IsSuccess);
+        Assert.True(result.PeOffset >= 64);
+        Assert.Null(result.ErrorMessage);
     }
+
     [Fact]
-    public void CheckParseHeader_EXE_False()
+    public void Parse_NonExistentFile_ReturnsFail()
     {
         var parser = new HeaderParser();
-        string systemExePath = @"C:\Windows\hzbrat\cmd.exe";
-        int result = parser.CheckDOSHeader(systemExePath);
-        Assert.Equal(-1,result);
+        string fakePath = @"C:\fake_file_9999.exe";
+        var result = parser.Parse(fakePath);
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_NonPeFile_ReturnsFailWithSignatureError()
+    {
+        var parser = new HeaderParser();
+        string nonPePath = @"C:\Windows\win.ini"; 
+        var result = parser.Parse(nonPePath);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("This file does not match the executable file type", result.ErrorMessage);
     }
 }
