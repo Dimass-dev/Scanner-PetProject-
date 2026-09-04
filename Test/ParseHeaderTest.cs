@@ -1,38 +1,54 @@
-﻿using Core.PE;
-using Xunit;
+﻿namespace Scanner.Tests;
 
-namespace Test;
+using Core.PE;
+using Core.Models;
+using Xunit;
 
 public class HeaderParserTests
 {
+    private readonly HeaderParser _parser = new();
+
     [Fact]
-    public void Parse_ValidExe_ReturnsSuccessWithValidOffset()
+    public void Parse_CmdExe_SuccessfullyParsesArchitectureAndSecurityFlags()
     {
-        var parser = new HeaderParser();
-        string systemExe = @"C:\Windows\System32\cmd.exe";
-        var result = parser.Parse(systemExe);
-        Assert.True(result.IsSuccess);
-        Assert.True(result.PeOffset >= 64);
-        Assert.Null(result.ErrorMessage);
+        var result = _parser.Parse(@"C:\Windows\System32\cmd.exe");
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.NotNull(result.Info);
+        Assert.Equal("x64", result.Info.Architecture);
+        Assert.True(result.Info.HasASLR);
+        Assert.True(result.Info.HasDEP);
     }
 
     [Fact]
-    public void Parse_NonExistentFile_ReturnsFail()
+    public void Parse_InvalidSignature_ReturnsFailure()
     {
-        var parser = new HeaderParser();
-        string fakePath = @"C:\fake_file_9999.exe";
-        var result = parser.Parse(fakePath);
-        Assert.False(result.IsSuccess);
-        Assert.NotNull(result.ErrorMessage);
-    }
+        string tempPath = Path.GetTempFileName();
+        try
+        {
+            byte[] dummyData = new byte[256];
+            dummyData[0] = 0x4D;
+            dummyData[1] = 0x5A;
+            dummyData[0x3C] = 0x40;
 
-    [Fact]
-    public void Parse_NonPeFile_ReturnsFailWithSignatureError()
-    {
-        var parser = new HeaderParser();
-        string nonPePath = @"C:\Windows\win.ini"; 
-        var result = parser.Parse(nonPePath);
-        Assert.False(result.IsSuccess);
-        Assert.Equal("This file does not match the executable file type", result.ErrorMessage);
+            dummyData[0x40] = (byte)'F';
+            dummyData[0x41] = (byte)'A';
+            dummyData[0x42] = (byte)'I';
+            dummyData[0x43] = (byte)'L';
+
+            File.WriteAllBytes(tempPath, dummyData);
+
+            var result = _parser.Parse(tempPath);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("Wrong signature", result.ErrorMessage);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
     }
 }

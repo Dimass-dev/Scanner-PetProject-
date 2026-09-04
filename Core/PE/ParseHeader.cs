@@ -33,9 +33,14 @@ public class HeaderParser
             return HPResult.Fail(errmessage!);
         }
         string architecture = GetArchitecture(headerSpan,peoffset);
+        ushort dllcharacteristics = TryGetDLLCharacteristics(headerSpan,peoffset);
+        bool hasAslr = (dllcharacteristics & 0x0040) != 0;
+        bool hasDep = (dllcharacteristics & 0x0100) != 0;
         var info = new HPInfo{
           PeOffset = peoffset,
           Architecture = architecture,
+          HasASLR = hasAslr,
+          HasDEP = hasDep,
         };
         return HPResult.Success(info);
     }
@@ -82,5 +87,10 @@ public class HeaderParser
             0xAA64 => "ARM64",
             _ => "Unknown"
         };  
+    }
+    private ushort TryGetDLLCharacteristics(ReadOnlySpan<byte> buffer,int peOffset)
+    {
+        int dllOffset = peOffset + 24 + 70;
+        return BitConverter.ToUInt16(buffer.Slice(dllOffset,2));
     }
 }   
