@@ -36,11 +36,17 @@ public class HeaderParser
         ushort dllcharacteristics = TryGetDLLCharacteristics(headerSpan,peoffset);
         bool hasAslr = (dllcharacteristics & 0x0040) != 0;
         bool hasDep = (dllcharacteristics & 0x0100) != 0;
+        ushort numberofSections = BitConverter.ToUInt16(headerSpan.Slice(peoffset + 6,2));
+        ushort sizeofoptionalHeader = BitConverter.ToUInt16(headerSpan.Slice(peoffset + 20,2));
+        int sectionOffset = peoffset + 24 + sizeofoptionalHeader;
         var info = new HPInfo{
           PeOffset = peoffset,
           Architecture = architecture,
           HasASLR = hasAslr,
           HasDEP = hasDep,
+          NumberOfSections = numberofSections,
+          SizeOfOptionalHeader = sizeofoptionalHeader,
+          SectionOffset = sectionOffset
         };
         return HPResult.Success(info);
     }
