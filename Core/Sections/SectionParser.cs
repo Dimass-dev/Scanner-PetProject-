@@ -25,7 +25,7 @@ public class SectionParser
                 VirtualAddress = BitConverter.ToUInt32(sectionSpan.Slice(sectionStart + 12, 4)),
                 SizeOfRawData = BitConverter.ToUInt32(sectionSpan.Slice(sectionStart + 16, 4)),
                 PointerToRawData = BitConverter.ToUInt32(sectionSpan.Slice(sectionStart + 20, 4)),
-                Characteristics = BitConverter.ToUInt32(sectionSpan.Slice(sectionStart + 36, 4))
+                Characteristics = (SectionFlag)BitConverter.ToUInt32(sectionSpan.Slice(sectionStart + 36, 4))
             };
             sections.Add(sectionInfo);
         }

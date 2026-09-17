@@ -6,5 +6,5 @@ public class SingleSectionInfo
     public uint VirtualAddress{get;init;}
     public uint SizeOfRawData{get;init;}
     public uint PointerToRawData{get;init;}
-    public uint Characteristics{get;init;}
+    public SectionFlag Characteristics{get;init;}
 }
