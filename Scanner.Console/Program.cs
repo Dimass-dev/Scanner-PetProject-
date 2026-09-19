@@ -60,7 +60,8 @@ namespace Scanner.ConsoleApp
             {
                 Console.WriteLine($"{sec.SectionName,-8} | 0x{sec.VirtualSize:X8} | 0x{sec.VirtualAddress:X8} | 0x{sec.SizeOfRawData:X8} | 0x{sec.PointerToRawData:X8} | {sec.Characteristics}");
             }
-
+            Console.WriteLine($"Import Directory RVA:    0x{info.ImportDirectoryRVA:X8}");
+            Console.WriteLine($"Import Directory Size:   0x{info.ImportDirectorySize:X8}");
             Console.WriteLine("\n============================================================");
             Console.WriteLine("[+] SCAN COMPLETE");
             Console.WriteLine("============================================================");

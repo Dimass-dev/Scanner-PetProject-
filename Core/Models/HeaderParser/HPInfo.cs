@@ -8,4 +8,6 @@ public class HPInfo
     public uint NumberOfSections{get;init;}
     public uint SizeOfOptionalHeader{get;init;}
     public int SectionOffset{get;init;}
+    public uint ImportDirectoryRVA{get;init;}
+    public uint ImportDirectorySize{get;init;}
 }

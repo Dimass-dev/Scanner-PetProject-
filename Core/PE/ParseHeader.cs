@@ -39,6 +39,19 @@ public class HeaderParser
         ushort numberofSections = BitConverter.ToUInt16(headerSpan.Slice(peoffset + 6,2));
         ushort sizeofoptionalHeader = BitConverter.ToUInt16(headerSpan.Slice(peoffset + 20,2));
         int sectionOffset = peoffset + 24 + sizeofoptionalHeader;
+        int importDirectoryOffset = architecture switch
+        {
+            "x86" => peoffset + 24 + 104,
+            "x64" => peoffset + 24 + 120,
+            _ => 0
+        };
+        uint importRVA = 0;
+        uint importSize = 0;
+        if(importDirectoryOffset != 0 && importDirectoryOffset + 8 <= headerSpan.Length)
+        {
+             importRVA = BitConverter.ToUInt32(headerSpan.Slice(importDirectoryOffset,4));
+             importSize = BitConverter.ToUInt32(headerSpan.Slice(importDirectoryOffset + 4,4));
+        }
         var info = new HPInfo{
           PeOffset = peoffset,
           Architecture = architecture,
@@ -46,7 +59,9 @@ public class HeaderParser
           HasDEP = hasDep,
           NumberOfSections = numberofSections,
           SizeOfOptionalHeader = sizeofoptionalHeader,
-          SectionOffset = sectionOffset
+          SectionOffset = sectionOffset,
+          ImportDirectoryRVA = importRVA,
+          ImportDirectorySize = importSize
         };
         return HPResult.Success(info);
     }
