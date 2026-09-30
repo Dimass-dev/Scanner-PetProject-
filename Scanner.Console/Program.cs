@@ -1,5 +1,6 @@
 ﻿using Core.PE;
 using Core.Sections;
+using Core.Models;
 using System;
 using System.IO;
 
@@ -62,6 +63,28 @@ namespace Scanner.ConsoleApp
             }
             Console.WriteLine($"Import Directory RVA:    0x{info.ImportDirectoryRVA:X8}");
             Console.WriteLine($"Import Directory Size:   0x{info.ImportDirectorySize:X8}");
+            if (headerResult.Info!.ImportDirectoryRVA != 0)
+{
+    Console.WriteLine("\n--- IMPORTED DLLs ---");
+    Console.WriteLine($"{"DLL Name",-30} | {"Name RVA",-10} | {"OFT (INT)",-10} | {"FT (IAT)",-10}");
+    Console.WriteLine(new string('-', 70));
+
+    var importParser = new ImportedParser();
+    
+    var importedDlls = importParser.ParserImportedDLL(
+        filePath, 
+        headerResult.Info.ImportDirectoryRVA, 
+        sectionResult.SectionInfo);
+
+    foreach (var dll in importedDlls)
+    {
+        Console.WriteLine($"{dll.DLLName,-30} | 0x{dll.NameRVA:X8} | 0x{dll.OriginalFirstThunk:X8} | 0x{dll.FirstThunk:X8}");
+    }
+}
+else
+{
+    Console.WriteLine("\nNo Import Directory found in this file.");
+}
             Console.WriteLine("\n============================================================");
             Console.WriteLine("[+] SCAN COMPLETE");
             Console.WriteLine("============================================================");
