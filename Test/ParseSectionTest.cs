@@ -7,42 +7,48 @@ namespace Scanner.Tests
 {
     public class SectionParserTests
     {
-        private const string TestFilePath = @"C:\Windows\System32\notepad.exe";
-
         [Fact]
-        public void Parse_ValidPEFile_ReturnsSuccessAndSections()
+        public void Parse_SyntheticPe_ReturnsSuccessAndSections()
         {
-            var headerParser = new HeaderParser();
-            var headerResult = headerParser.Parse(TestFilePath);
-            
-            Assert.True(headerResult.IsSuccess);
-            Assert.NotNull(headerResult.Info);
+            string testFilePath = PeBuilder.WriteTemporaryPeFile();
+            try
+            {
+                var headerParser = new HeaderParser();
+                var headerResult = headerParser.Parse(testFilePath);
 
-            var sectionParser = new SectionParser();
-            var sectionResult = sectionParser.Parse(TestFilePath, headerResult.Info);
+                Assert.True(headerResult.IsSuccess);
+                Assert.NotNull(headerResult.Info);
 
-            Assert.True(sectionResult.IsSuccess);
-            Assert.Null(sectionResult.ErrorMessage);
-            Assert.NotNull(sectionResult.SectionInfo);
-            Assert.True(sectionResult.SectionInfo.Count > 0);
+                var sectionParser = new SectionParser();
+                var sectionResult = sectionParser.Parse(testFilePath, headerResult.Info);
 
-            Assert.Contains(sectionResult.SectionInfo, s => s.SectionName == ".text");
-            
-            var textSection = sectionResult.SectionInfo.Find(s => s.SectionName == ".text");
-            Assert.NotNull(textSection);
-            Assert.True(textSection.Characteristics.HasFlag(SectionFlag.MemExecute));
+                Assert.True(sectionResult.IsSuccess);
+                Assert.Null(sectionResult.ErrorMessage);
+                Assert.NotNull(sectionResult.SectionInfo);
+                Assert.True(sectionResult.SectionInfo.Count > 0);
+
+                Assert.Contains(sectionResult.SectionInfo, s => s.SectionName == ".text");
+
+                var textSection = sectionResult.SectionInfo.Find(s => s.SectionName == ".text");
+                Assert.NotNull(textSection);
+                Assert.True(textSection.Characteristics.HasFlag(SectionFlag.MemExecute));
+            }
+            finally
+            {
+                File.Delete(testFilePath);
+            }
         }
 
         [Fact]
         public void Parse_InvalidFilePath_ReturnsFail()
         {
-            string invalidFilePath = @"C:\NonExistent_Fake_File.exe";
+            string invalidFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.exe");
             var sectionParser = new SectionParser();
-            
-            var dummyInfo = new HPInfo 
-            { 
-                NumberOfSections = 1, 
-                SectionOffset = 512 
+
+            var dummyInfo = new HPInfo
+            {
+                NumberOfSections = 1,
+                SectionOffset = 512
             };
 
             var sectionResult = sectionParser.Parse(invalidFilePath, dummyInfo);

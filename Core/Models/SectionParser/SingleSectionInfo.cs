@@ -7,4 +7,6 @@ public class SingleSectionInfo
     public uint SizeOfRawData{get;init;}
     public uint PointerToRawData{get;init;}
     public SectionFlag Characteristics{get;init;}
+    public string Name => SectionName;
+    public SectionFlag Flags => Characteristics;
 }

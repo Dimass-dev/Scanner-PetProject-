@@ -1,0 +1,68 @@
+.risk-banner {
+  padding: 1.5rem;
+  background: white;
+  border-left: 4px solid;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin: 1.5rem 0;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.risk-level {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.risk-icon {
+  font-size: 2rem;
+}
+
+.risk-score {
+  font-size: 1.1rem;
+  color: #666;
+}
+
+.risk-counts {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.count {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: #f5f5f5;
+}
+
+.count.critical {
+  background: #fee;
+  color: #8b0000;
+}
+
+.count.high {
+  background: #fee;
+  color: #d9534f;
+}
+
+.count.medium {
+  background: #fff8e1;
+  color: #f0ad4e;
+}
+
+.count.low {
+  background: #e8f5e9;
+  color: #5cb85c;
+}
+
+.count.info {
+  background: #e3f2fd;
+  color: #5bc0de;
+}

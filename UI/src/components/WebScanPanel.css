@@ -1,0 +1,51 @@
+.web-scan-panel {
+  padding: 1.5rem;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
+}
+
+.web-scan-panel h2 { margin-top: 0; color: #263449; }
+.web-scan-intro, .web-scan-scope-note { color: #566273; line-height: 1.55; }
+.web-scan-form { margin: 1.5rem 0; }
+.web-scan-form label { display: block; margin-bottom: .45rem; font-weight: 650; }
+.web-scan-form .openapi-label { margin-top: 1rem; }
+.web-scan-controls { display: flex; gap: .6rem; }
+.web-scan-controls input { flex: 1; min-width: 0; padding: .75rem; border: 1px solid #9aa7b5; border-radius: 5px; font: inherit; }
+.web-scan-controls button { padding: .7rem 1rem; border: 0; border-radius: 5px; background: #2664a5; color: white; font: inherit; font-weight: 600; cursor: pointer; }
+.web-scan-controls button:disabled { opacity: .6; cursor: wait; }
+.web-scan-controls .web-cancel { background: #a63636; }
+.web-scan-scope-note { font-size: .88rem; }
+.active-probe-box { margin: 1rem 0; padding: .9rem 1rem; background: #fff7e7; border-left: 4px solid #d6a447; border-radius: 4px; }
+.active-probe-box p { margin: .4rem 0; color: #5c4b2c; }
+.active-probe-toggle, .active-probe-confirm { display: flex; gap: .55rem; align-items: flex-start; font-weight: 600; }
+.active-probe-confirm { margin-top: .7rem; font-weight: 500; }
+.web-scan-error, .web-scan-error-list { margin: 1rem 0; padding: .9rem 1rem; color: #842029; background: #f8d7da; border-radius: 5px; }
+.web-scan-results { margin-top: 2rem; }
+.web-results-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.web-results-header h3 { margin: 0 0 .4rem; }
+.web-results-header code { overflow-wrap: anywhere; }
+.web-scan-status { padding: .35rem .65rem; border-radius: 999px; background: #e7edf5; white-space: nowrap; }
+.web-results-actions { display: flex; align-items: center; gap: .6rem; }
+.web-results-actions button { padding: .5rem .75rem; border: 1px solid #9aa7b5; border-radius: 5px; background: white; color: #263449; font: inherit; cursor: pointer; }
+.web-no-findings { padding: 1rem; background: #edf7ed; border-radius: 5px; }
+.web-coverage { margin-top: 1.25rem; padding: 1rem; background: #f4f6f9; border-radius: 6px; }
+.web-coverage h3 { margin: 0 0 .75rem; }
+.web-coverage dl { margin: 0; }
+.web-coverage dl div { display: grid; grid-template-columns: minmax(150px, 1fr) 2fr; gap: .8rem; padding: .35rem 0; border-top: 1px solid #dce2e8; }
+.web-coverage dt { font-weight: 600; }
+.web-coverage dd { margin: 0; overflow-wrap: anywhere; }
+.auth-probe { margin-top: 2rem; padding: 1rem; border: 1px solid #d6a447; border-radius: 6px; background: #fffaf0; }
+.auth-probe summary { font-weight: 700; cursor: pointer; }
+.auth-probe p { line-height: 1.5; }
+.auth-probe form { display: grid; gap: .5rem; }
+.auth-probe form input:not([type="checkbox"]) { max-width: 36rem; padding: .6rem; border: 1px solid #9aa7b5; border-radius: 4px; font: inherit; }
+.auth-probe form button { justify-self: start; padding: .65rem 1rem; border: 0; border-radius: 5px; background: #9a5d12; color: white; font: inherit; cursor: pointer; }
+.auth-probe form button:disabled { opacity: .55; cursor: not-allowed; }
+.auth-probe .auth-confirm { display: flex; gap: .55rem; align-items: flex-start; max-width: 52rem; margin: .5rem 0; font-weight: 500; }
+.auth-probe-result { padding: .8rem; background: white; border-radius: 4px; overflow-wrap: anywhere; }
+
+@media (max-width: 700px) {
+  .web-scan-controls, .web-results-header, .web-results-actions { align-items: stretch; flex-direction: column; }
+  .web-coverage dl div { grid-template-columns: 1fr; gap: .1rem; }
+}

@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-dotnet:
+    name: .NET Build & Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies (full solution)
+      if: matrix.os == 'windows-latest'
+      run: dotnet restore
+
+    - name: Build (full solution)
+      if: matrix.os == 'windows-latest'
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Test (full solution)
+      if: matrix.os == 'windows-latest'
+      run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+    # The WPF desktop project targets net10.0-windows and is only built on Windows.
+    - name: Build cross-platform projects (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        dotnet build Server/Server.csproj --configuration Release
+        dotnet build Scanner.Console/Scanner.Console.csproj --configuration Release
+
+    - name: Test cross-platform projects (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: dotnet test Test/Test.csproj --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}
+        path: '**/test-results.trx'
+
+  frontend:
+    name: Frontend Build & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./UI
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: './UI/package-lock.json'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint
+      run: npm run lint
+
+    - name: Build
+      run: npm run build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: UI/dist

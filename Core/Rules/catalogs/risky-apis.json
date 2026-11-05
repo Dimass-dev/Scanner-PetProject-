@@ -1,0 +1,98 @@
+{
+  "groups": {
+    "injection": {
+      "name": "Process Injection",
+      "apis": [
+        "VirtualAllocEx",
+        "WriteProcessMemory",
+        "CreateRemoteThread",
+        "NtCreateThreadEx",
+        "QueueUserAPC",
+        "SetThreadContext",
+        "NtMapViewOfSection",
+        "NtUnmapViewOfSection",
+        "RtlCreateUserThread"
+      ],
+      "severity": "Critical"
+    },
+    "networking": {
+      "name": "Network Communication",
+      "apis": [
+        "InternetOpen",
+        "InternetOpenUrl",
+        "InternetReadFile",
+        "URLDownloadToFile",
+        "WinHttpOpen",
+        "WinHttpConnect",
+        "WinHttpOpenRequest",
+        "WSAStartup",
+        "socket",
+        "connect",
+        "send",
+        "recv"
+      ],
+      "severity": "Medium"
+    },
+    "persistence": {
+      "name": "Persistence Mechanisms",
+      "apis": [
+        "RegSetValueEx",
+        "RegCreateKeyEx",
+        "CreateService",
+        "OpenSCManager",
+        "StartService",
+        "ChangeServiceConfig",
+        "CreateProcessAsUser",
+        "CreateProcessWithToken"
+      ],
+      "severity": "Medium"
+    },
+    "antidebug": {
+      "name": "Anti-Debug",
+      "apis": [
+        "IsDebuggerPresent",
+        "CheckRemoteDebuggerPresent",
+        "NtQueryInformationProcess",
+        "OutputDebugString",
+        "NtSetInformationThread",
+        "DebugActiveProcess",
+        "NtQuerySystemInformation"
+      ],
+      "severity": "Low"
+    },
+    "dynamic_resolution": {
+      "name": "Dynamic API Resolution",
+      "apis": [
+        "LoadLibrary",
+        "LoadLibraryEx",
+        "GetProcAddress",
+        "LdrLoadDll",
+        "LdrGetProcedureAddress"
+      ],
+      "severity": "Medium"
+    },
+    "crypto": {
+      "name": "Cryptography",
+      "apis": [
+        "CryptEncrypt",
+        "CryptDecrypt",
+        "CryptAcquireContext",
+        "BCryptEncrypt",
+        "BCryptDecrypt",
+        "BCryptGenerateSymmetricKey"
+      ],
+      "severity": "Info"
+    },
+    "privilege": {
+      "name": "Privilege Escalation",
+      "apis": [
+        "AdjustTokenPrivileges",
+        "OpenProcessToken",
+        "LookupPrivilegeValue",
+        "SeDebugPrivilege",
+        "ImpersonateLoggedOnUser"
+      ],
+      "severity": "High"
+    }
+  }
+}

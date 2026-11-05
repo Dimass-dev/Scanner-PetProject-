@@ -1,0 +1,44 @@
+{
+  "patterns": {
+    "upx": {
+      "pattern": "^UPX[0-9]?$",
+      "description": "UPX packer section",
+      "severity": "High"
+    },
+    "aspack": {
+      "pattern": "^\\.aspack$",
+      "description": "ASPack packer section",
+      "severity": "High"
+    },
+    "themida": {
+      "pattern": "^\\.themida$",
+      "description": "Themida protector section",
+      "severity": "High"
+    },
+    "vmp": {
+      "pattern": "^\\.vmp[0-9]?$",
+      "description": "VMProtect section",
+      "severity": "High"
+    },
+    "packed": {
+      "pattern": "^\\.packed$",
+      "description": "Generic packed section",
+      "severity": "High"
+    },
+    "enigma": {
+      "pattern": "^\\.enigma[0-9]?$",
+      "description": "Enigma protector section",
+      "severity": "High"
+    },
+    "mpress": {
+      "pattern": "^\\.MPRESS[12]$",
+      "description": "MPRESS packer section",
+      "severity": "High"
+    },
+    "petite": {
+      "pattern": "^\\.petite$",
+      "description": "Petite packer section",
+      "severity": "High"
+    }
+  }
+}

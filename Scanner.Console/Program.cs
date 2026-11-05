@@ -1,93 +1,73 @@
-﻿using Core.PE;
-using Core.Sections;
-using Core.Models;
-using System;
-using System.IO;
+using Core.Modules;
+using Core.Scanning;
 
-namespace Scanner.ConsoleApp
+namespace Scanner.ConsoleApp;
+
+internal static class Program
 {
-    class Program
+    private static async Task<int> Main(string[] args)
     {
-        static void Main(string[] args)
+        if (args.Length > 1)
         {
-            string filePath = @"C:\Windows\System32\notepad.exe";
-
-            Console.WriteLine("============================================================");
-            Console.WriteLine($"[+] SCANNING FILE: {Path.GetFileName(filePath)}");
-            Console.WriteLine("============================================================\n");
-
-            // --- STAGE 1: Parse Base Headers ---
-            Console.WriteLine("[*] Reading DOS and PE headers...");
-            var headerParser = new HeaderParser();
-            var headerResult = headerParser.Parse(filePath);
-
-            if (!headerResult.IsSuccess)
-            {
-                Console.WriteLine($"[-] ERROR: {headerResult.ErrorMessage}");
-                return;
-            }
-
-            var info = headerResult.Info;
-            Console.WriteLine("[+] Base headers parsed successfully!\n");
-
-            Console.WriteLine("--- BASIC FILE INFORMATION ---");
-            Console.WriteLine($"PE Header Offset:        0x{info!.PeOffset:X4}");
-            Console.WriteLine($"Architecture (Machine):  {info.Architecture}");
-            Console.WriteLine($"Optional Header Size:    {info.SizeOfOptionalHeader} bytes");
-            Console.WriteLine($"Number of Sections:      {info.NumberOfSections}");
-            Console.WriteLine($"Section Table Offset:    0x{info.SectionOffset:X4}");
-
-            Console.WriteLine("\n--- SECURITY MECHANISMS ---");
-            Console.WriteLine($"ASLR Enabled:            {(info.HasASLR ? "Yes" : "No")}");
-            Console.WriteLine($"DEP (NX Bit) Enabled:    {(info.HasDEP ? "Yes" : "No")}");
-            Console.WriteLine();
-
-            // --- STAGE 2: Parse Section Table ---
-            Console.WriteLine("[*] Reading Section Table...");
-            var sectionParser = new SectionParser();
-            var sectionResult = sectionParser.Parse(filePath, info);
-
-            if (!sectionResult.IsSuccess)
-            {
-                Console.WriteLine($"[-] ERROR READING SECTIONS: {sectionResult.ErrorMessage}");
-                return;
-            }
-
-            Console.WriteLine("[+] Section Table parsed successfully!\n");
-
-            Console.WriteLine($"{"Name",-8} | {"V. Size",-10} | {"V. Address",-10} | {"Raw Size",-10} | {"Raw Ptr",-10} | {"Flags",-45}");
-            Console.WriteLine(new string('-', 110));
-            foreach (var sec in sectionResult.SectionInfo!)
-            {
-                Console.WriteLine($"{sec.SectionName,-8} | 0x{sec.VirtualSize:X8} | 0x{sec.VirtualAddress:X8} | 0x{sec.SizeOfRawData:X8} | 0x{sec.PointerToRawData:X8} | {sec.Characteristics}");
-            }
-            Console.WriteLine($"Import Directory RVA:    0x{info.ImportDirectoryRVA:X8}");
-            Console.WriteLine($"Import Directory Size:   0x{info.ImportDirectorySize:X8}");
-            if (headerResult.Info!.ImportDirectoryRVA != 0)
-{
-    Console.WriteLine("\n--- IMPORTED DLLs ---");
-    Console.WriteLine($"{"DLL Name",-30} | {"Name RVA",-10} | {"OFT (INT)",-10} | {"FT (IAT)",-10}");
-    Console.WriteLine(new string('-', 70));
-
-    var importParser = new ImportedParser();
-    
-    var importedDlls = importParser.ParserImportedDLL(
-        filePath, 
-        headerResult.Info.ImportDirectoryRVA, 
-        sectionResult.SectionInfo);
-
-    foreach (var dll in importedDlls)
-    {
-        Console.WriteLine($"{dll.DLLName,-30} | 0x{dll.NameRVA:X8} | 0x{dll.OriginalFirstThunk:X8} | 0x{dll.FirstThunk:X8}");
-    }
-}
-else
-{
-    Console.WriteLine("\nNo Import Directory found in this file.");
-}
-            Console.WriteLine("\n============================================================");
-            Console.WriteLine("[+] SCAN COMPLETE");
-            Console.WriteLine("============================================================");
+            Console.Error.WriteLine("Usage: Scanner.Console [path-to-pe-file]");
+            return 2;
         }
+
+        // Keep `dotnet run` useful without arguments, matching the original demo behavior.
+        string filePath = args.Length == 1
+            ? args[0]
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "notepad.exe");
+
+        Console.WriteLine("============================================================");
+        Console.WriteLine($"[+] SCANNING FILE: {Path.GetFileName(filePath)}");
+        if (args.Length == 0)
+            Console.WriteLine($"[*] No path supplied; using default: {filePath}");
+        Console.WriteLine("============================================================\n");
+
+        // Create default PE scan module with all rules
+        var peModule = PeScanModule.CreateDefault();
+        var coordinator = new ScanCoordinator(new[] { peModule });
+        ScanReport report = await coordinator.ScanAsync(ScanTarget.ForPeFile(filePath));
+
+        foreach (ScanModuleResult module in report.Modules)
+        {
+            if (module.Status != ScanStatus.Succeeded)
+            {
+                Console.Error.WriteLine($"[-] {module.ErrorMessage}");
+                continue;
+            }
+
+            Console.WriteLine("[Artifacts & Metadata]");
+            foreach (ScanArtifact artifact in module.Artifacts)
+            {
+                Console.WriteLine($"[{artifact.Kind}] {artifact.Name}");
+                foreach ((string key, string value) in artifact.Properties)
+                    Console.WriteLine($"  {key}: {value}");
+            }
+
+            if (module.Findings.Count > 0)
+            {
+                Console.WriteLine("\n[Security Findings]");
+                foreach (ScanFinding finding in module.Findings)
+                {
+                    Console.WriteLine($"  * [{finding.Severity}] {finding.RuleId}: {finding.Title}");
+                    Console.WriteLine($"    Description: {finding.Description}");
+                    if (!string.IsNullOrEmpty(finding.Evidence))
+                        Console.WriteLine($"    Evidence: {finding.Evidence}");
+                    if (!string.IsNullOrEmpty(finding.Recommendation))
+                        Console.WriteLine($"    Recommendation: {finding.Recommendation}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("\n[Security Findings]");
+                Console.WriteLine("  No security findings detected.");
+            }
+        }
+
+        Console.WriteLine("\n============================================================");
+        Console.WriteLine(report.Status == ScanStatus.Succeeded ? "[+] SCAN COMPLETE" : "[-] SCAN FAILED");
+        Console.WriteLine("============================================================");
+        return report.Status == ScanStatus.Succeeded ? 0 : 1;
     }
 }

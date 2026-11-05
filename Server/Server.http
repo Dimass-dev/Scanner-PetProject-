@@ -1,6 +1,49 @@
 @Server_HostAddress = http://localhost:5290
 
-GET {{Server_HostAddress}}/weatherforecast/
+### Health check
+GET {{Server_HostAddress}}/api/scan/health
 Accept: application/json
 
-###
+### Scan a single PE file
+POST {{Server_HostAddress}}/api/scan/file
+Content-Type: multipart/form-data; boundary=----ScannerBoundary
+
+------ScannerBoundary
+Content-Disposition: form-data; name="file"; filename="sample.exe"
+Content-Type: application/octet-stream
+
+< ./sample.exe
+------ScannerBoundary--
+
+### Scan a ZIP archive
+POST {{Server_HostAddress}}/api/scan/archive
+Content-Type: multipart/form-data; boundary=----ScannerBoundary
+
+------ScannerBoundary
+Content-Disposition: form-data; name="file"; filename="sample.zip"
+Content-Type: application/zip
+
+< ./sample.zip
+------ScannerBoundary--
+
+### Scan a web target
+POST {{Server_HostAddress}}/api/scan/web
+Content-Type: application/json
+
+{
+  "targetUrl": "https://example.com",
+  "enableLimitedActive": false,
+  "confirmedActiveTest": false
+}
+
+### Check authentication rate limiting
+POST {{Server_HostAddress}}/api/scan/web/auth-rate-limit
+Content-Type: application/json
+
+{
+  "targetUrl": "https://example.com",
+  "loginPath": "/login",
+  "testUsername": "scanner-test-user",
+  "attempts": 5,
+  "confirmedControlledTestAccount": false
+}

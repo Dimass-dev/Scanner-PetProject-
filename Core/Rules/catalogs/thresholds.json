@@ -1,0 +1,22 @@
+{
+  "entropy": {
+    "highThreshold": 7.2,
+    "mediumThreshold": 6.8,
+    "description": "Entropy thresholds for detecting packed/encrypted sections"
+  },
+  "overlay": {
+    "sizeBytes": 65536,
+    "percentageOfFile": 0.05,
+    "description": "Thresholds for overlay detection (64KB and 5% of file size)"
+  },
+  "imports": {
+    "maxImportsPerDll": 1000,
+    "maxTotalImports": 5000,
+    "description": "Limits for import parsing"
+  },
+  "sections": {
+    "maxSections": 96,
+    "maxNameLength": 8,
+    "description": "Section validation thresholds"
+  }
+}

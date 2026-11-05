@@ -1,0 +1,72 @@
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Scanner.Desktop.Models;
+
+namespace Scanner.Desktop.Services;
+
+public class ScannerApiClient : IScannerApiClient
+{
+    private readonly HttpClient _httpClient;
+    private readonly JsonSerializerOptions _jsonOptions;
+
+    public ScannerApiClient(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+        _httpClient.BaseAddress = new Uri("http://localhost:5290");
+        _httpClient.Timeout = TimeSpan.FromMinutes(5);
+
+        _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+    }
+
+    public async Task<ScanResult?> ScanFileAsync(string filePath, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException("File not found", filePath);
+
+        using var content = new MultipartFormDataContent();
+        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var fileContent = new StreamContent(stream);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        content.Add(fileContent, "file", Path.GetFileName(filePath));
+
+        var response = await _httpClient.PostAsync("/api/scan/file", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<ScanResult>(_jsonOptions, cancellationToken);
+    }
+
+    public async Task<ArchiveScanResult?> ScanArchiveAsync(string archivePath, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(archivePath))
+            throw new FileNotFoundException("Archive not found", archivePath);
+
+        using var content = new MultipartFormDataContent();
+        await using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var fileContent = new StreamContent(stream);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+        content.Add(fileContent, "file", Path.GetFileName(archivePath));
+
+        var response = await _httpClient.PostAsync("/api/scan/archive", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<ArchiveScanResult>(_jsonOptions, cancellationToken);
+    }
+
+    public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync("/api/scan/health", cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}

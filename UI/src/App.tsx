@@ -1,122 +1,140 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState } from 'react';
+import { useScan } from './hooks/useScan';
+import { UploadZone } from './components/UploadZone';
+import { RiskBanner } from './components/RiskBanner';
+import { FindingsList } from './components/FindingsList';
+import { WebScanPanel } from './components/WebScanPanel';
+import { LoadTestPanel } from './components/LoadTestPanel';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [activeView, setActiveView] = useState<'files' | 'web' | 'load'>('files');
+  const { isLoading, error, result, scanFile, scanArchive, abort, reset } = useScan();
+
+  const handleFileSelect = async (file: File) => {
+    try {
+      if (file.name.endsWith('.zip')) {
+        await scanArchive(file);
+      } else {
+        await scanFile(file);
+      }
+    } catch (err) {
+      console.error('Scan error:', err);
+    }
+  };
+
+  const isArchiveResult = result && 'files' in result;
+  const singleFileResult = !isArchiveResult ? result : null;
+  const archiveResult = isArchiveResult ? result : null;
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app">
+      <header className="app-header">
+        <h1>🛡️ Multi-Scanner</h1>
+        <p className="subtitle">Local security checks for PE files and web services</p>
+        <p className="disclaimer">Use only with systems you own or have permission to assess.</p>
+      </header>
 
-      <div className="ticks"></div>
+      <nav className="scanner-tabs" aria-label="Scanner type">
+        <button className={activeView === 'files' ? 'active' : ''} onClick={() => setActiveView('files')}>PE files and ZIP</button>
+        <button className={activeView === 'web' ? 'active' : ''} onClick={() => setActiveView('web')}>Web service</button>
+        <button className={activeView === 'load' ? 'active' : ''} onClick={() => setActiveView('load')}>Load test</button>
+      </nav>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <main className="app-main">
+        {activeView === 'web' ? <WebScanPanel /> : activeView === 'load' ? <LoadTestPanel /> : <>
+        <UploadZone onFileSelect={handleFileSelect} isLoading={isLoading} />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        {isLoading && (
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <p>Analyzing file...</p>
+            <button onClick={abort} className="abort-btn">Cancel</button>
+          </div>
+        )}
+
+        {error && (
+          <div className="error-state">
+            <span className="error-icon">❌</span>
+            <p>{error}</p>
+            <button onClick={reset} className="reset-btn">Try Again</button>
+          </div>
+        )}
+
+        {singleFileResult && singleFileResult.risk && (
+          <div className="results">
+            <div className="results-header">
+              <h2>{singleFileResult.fileName}</h2>
+              <button onClick={reset} className="new-scan-btn">New Scan</button>
+            </div>
+
+            <RiskBanner risk={singleFileResult.risk} />
+
+            {singleFileResult.findings.length > 0 && (
+              <FindingsList findings={singleFileResult.findings} />
+            )}
+
+            {singleFileResult.artifacts && Object.keys(singleFileResult.artifacts).length > 0 && (
+              <div className="artifacts">
+                <h3>File Details</h3>
+                <div className="artifacts-grid">
+                  {Object.entries(singleFileResult.artifacts).map(([key, value]) => (
+                    <div key={key} className="artifact-card">
+                      <h4>{key}</h4>
+                      <pre>{JSON.stringify(value, null, 2)}</pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {archiveResult && (
+          <div className="results">
+            <div className="results-header">
+              <h2>{archiveResult.archiveName}</h2>
+              <button onClick={reset} className="new-scan-btn">New Scan</button>
+            </div>
+
+            <div className="archive-summary">
+              <p>Extracted: {archiveResult.extractedFileCount} files</p>
+              <p>Scanned: {archiveResult.scannedFileCount} PE files</p>
+            </div>
+
+            {archiveResult.overallRisk && (
+              <RiskBanner risk={archiveResult.overallRisk} />
+            )}
+
+            {archiveResult.files.map((file, idx) => (
+              <div key={idx} className="file-result">
+                <h3>{file.relativePath}</h3>
+                {file.risk && <RiskBanner risk={file.risk} />}
+                {file.findings.length > 0 && <FindingsList findings={file.findings} />}
+              </div>
+            ))}
+
+            {archiveResult.extractionErrors.length > 0 && (
+              <div className="extraction-errors">
+                <h3>Extraction Warnings</h3>
+                <ul>
+                  {archiveResult.extractionErrors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        </>}
+      </main>
+
+      <footer className="app-footer">
+        <p>Multi-Scanner Platform v0.1.0</p>
+        <p>Web tab runs a bounded passive baseline. It does not perform penetration or load testing.</p>
+      </footer>
+    </div>
+  );
 }
 
-export default App
+export default App;

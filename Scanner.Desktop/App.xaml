@@ -1,0 +1,13 @@
+<Application x:Class="Scanner.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Scanner.Desktop"
+             xmlns:conv="clr-namespace:Scanner.Desktop.Converters">
+    <Application.Resources>
+        <ResourceDictionary>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
+            <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

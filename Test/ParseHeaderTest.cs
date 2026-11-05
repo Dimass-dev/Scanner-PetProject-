@@ -1,7 +1,6 @@
 ﻿namespace Scanner.Tests;
 
 using Core.PE;
-using Core.Models;
 using Xunit;
 
 public class HeaderParserTests
@@ -9,46 +8,42 @@ public class HeaderParserTests
     private readonly HeaderParser _parser = new();
 
     [Fact]
-    public void Parse_CmdExe_SuccessfullyParsesArchitectureAndSecurityFlags()
+    public void Parse_SyntheticPe64_SuccessfullyParsesArchitectureAndSecurityFlags()
     {
-        var result = _parser.Parse(@"C:\Windows\System32\cmd.exe");
+        string tempPath = PeBuilder.WriteTemporaryPeFile();
+        try
+        {
+            var result = _parser.Parse(tempPath);
 
-        Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.Info);
-        Assert.Equal("x64", result.Info.Architecture);
-        Assert.True(result.Info.HasASLR);
-        Assert.True(result.Info.HasDEP);
+            Assert.True(result.IsSuccess, result.ErrorMessage);
+            Assert.NotNull(result.Info);
+            Assert.Equal("x64", result.Info.Architecture);
+            Assert.True(result.Info.HasASLR);
+            Assert.True(result.Info.HasDEP);
+        }
+        finally
+        {
+            File.Delete(tempPath);
+        }
     }
 
     [Fact]
     public void Parse_InvalidSignature_ReturnsFailure()
     {
-        string tempPath = Path.GetTempFileName();
+        byte[] image = PeBuilder.CreatePe64();
+        "FAIL"u8.CopyTo(image.AsSpan(PeBuilder.PeOffset));
+
+        string tempPath = PeBuilder.WriteTemporaryPeFile(image);
         try
         {
-            byte[] dummyData = new byte[256];
-            dummyData[0] = 0x4D;
-            dummyData[1] = 0x5A;
-            dummyData[0x3C] = 0x40;
-
-            dummyData[0x40] = (byte)'F';
-            dummyData[0x41] = (byte)'A';
-            dummyData[0x42] = (byte)'I';
-            dummyData[0x43] = (byte)'L';
-
-            File.WriteAllBytes(tempPath, dummyData);
-
             var result = _parser.Parse(tempPath);
 
             Assert.False(result.IsSuccess);
-            Assert.Equal("Wrong signature", result.ErrorMessage);
+            Assert.Equal("The PE signature is invalid.", result.ErrorMessage);
         }
         finally
         {
-            if (File.Exists(tempPath))
-            {
-                File.Delete(tempPath);
-            }
+            File.Delete(tempPath);
         }
     }
 }
