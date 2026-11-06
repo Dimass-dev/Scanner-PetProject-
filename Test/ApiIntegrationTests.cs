@@ -114,6 +114,31 @@ public sealed class ApiIntegrationTests
     }
 
     [Fact]
+    public async Task ScanArchive_CompressionRatioBomb_IsRejectedAsExtractionError()
+    {
+        await using var factory = new ScannerApiFactory();
+        using HttpClient client = factory.CreateClient();
+
+        // 200 KB of zeros compresses far beyond the default 100:1 ratio limit.
+        byte[] archive = CreateZip(("bomb.exe", new byte[200_000]));
+        using HttpResponseMessage response = await client.PostAsync(
+            "/api/scan/archive",
+            CreateFileContent(archive, "bundle.zip"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement root = document.RootElement;
+        string[] errors = root
+            .GetProperty("extractionErrors")
+            .EnumerateArray()
+            .Select(e => e.GetString() ?? string.Empty)
+            .ToArray();
+
+        Assert.Contains(errors, error => error.Contains("Compression ratio too high", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(0, root.GetProperty("extractedFileCount").GetInt32());
+    }
+
+    [Fact]
     public async Task ScanArchive_EntryTooLarge_IsRejectedAsExtractionError()
     {
         await using var factory = new ScannerApiFactory(new Dictionary<string, string?>
