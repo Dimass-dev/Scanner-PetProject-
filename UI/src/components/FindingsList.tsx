@@ -22,7 +22,7 @@ export function FindingsList({ findings }: FindingsListProps) {
 
   const filteredFindings = useMemo(() => {
     const filtered = selectedSeverity === 'All'
-      ? findings
+      ? [...findings]
       : findings.filter(f => f.severity === selectedSeverity);
 
     return filtered.sort((a, b) => {

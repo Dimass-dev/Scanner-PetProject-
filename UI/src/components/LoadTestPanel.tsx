@@ -5,6 +5,13 @@ interface K6Summary {
   metrics?: Record<string, { values?: Record<string, number> }>;
 }
 
+// Keep the previous value when the input holds a partial or non-numeric string
+// (Number('-') or Number('1e') is NaN, and NaN silently defeats range checks).
+function parseCount(raw: string, fallback: number): number {
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export function LoadTestPanel() {
   const [targetUrl, setTargetUrl] = useState('http://127.0.0.1:5290');
   const [path, setPath] = useState('/api/scan/health');
@@ -115,9 +122,9 @@ export default function () {
         <label htmlFor="load-path">Read-only endpoint path</label>
         <input id="load-path" required value={path} onChange={(event) => setPath(event.target.value)} placeholder="/health" />
         <div className="load-limits">
-          <label>Requests/sec (1–5)<input type="number" min={1} max={5} value={rate} onChange={(event) => setRate(Number(event.target.value))} /></label>
-          <label>Duration seconds (10–30)<input type="number" min={10} max={30} value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label>
-          <label>Virtual users (1–5)<input type="number" min={1} max={5} value={vus} onChange={(event) => setVus(Number(event.target.value))} /></label>
+          <label>Requests/sec (1–5)<input type="number" min={1} max={5} value={rate} onChange={(event) => setRate(parseCount(event.target.value, rate))} /></label>
+          <label>Duration seconds (10–30)<input type="number" min={10} max={30} value={duration} onChange={(event) => setDuration(parseCount(event.target.value, duration))} /></label>
+          <label>Virtual users (1–5)<input type="number" min={1} max={5} value={vus} onChange={(event) => setVus(parseCount(event.target.value, vus))} /></label>
         </div>
         {!isLocal && (
           <label className="load-confirm"><input type="checkbox" checked={remoteConfirmed} onChange={(event) => setRemoteConfirmed(event.target.checked)} /> I own or have permission to test this remote target.</label>

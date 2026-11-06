@@ -17,7 +17,7 @@ function App() {
 
   const handleFileSelect = async (file: File) => {
     try {
-      if (file.name.endsWith('.zip')) {
+      if (file.name.toLowerCase().endsWith('.zip')) {
         await scanArchive(file);
       } else {
         await scanFile(file);
