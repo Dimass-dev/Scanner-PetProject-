@@ -71,7 +71,9 @@ public sealed class ScannerEngineTests
         finally
         {
             if (File.Exists(tempFile))
+            {
                 File.Delete(tempFile);
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-﻿namespace Scanner.Tests;
+namespace Scanner.Tests;
 
 using Core.PE;
 using Xunit;
