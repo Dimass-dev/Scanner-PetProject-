@@ -42,19 +42,27 @@ public sealed class RiskAssessmentEngine
     {
         // Any Critical finding = Critical risk
         if (counts[ScanSeverity.Critical] > 0)
+        {
             return RiskLevel.Critical;
+        }
 
         // Score >= 15 or 2+ High = High risk
         if (score >= 15 || counts[ScanSeverity.High] >= 2)
+        {
             return RiskLevel.High;
+        }
 
         // Score >= 5 or 1+ Medium = Medium risk
         if (score >= 5 || counts[ScanSeverity.Medium] >= 1)
+        {
             return RiskLevel.Medium;
+        }
 
         // Score >= 1 or 1+ Low = Low risk
         if (score >= 1 || counts[ScanSeverity.Low] >= 1)
+        {
             return RiskLevel.Low;
+        }
 
         // No findings = Info
         return RiskLevel.Info;

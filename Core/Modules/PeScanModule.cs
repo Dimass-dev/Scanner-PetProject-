@@ -1,8 +1,8 @@
+using System.Text.Json;
 using Core.Analysis;
 using Core.Rules;
 using Core.Rules.BuiltIn;
 using Core.Scanning;
-using System.Text.Json;
 
 namespace Core.Modules;
 
@@ -11,6 +11,8 @@ namespace Core.Modules;
 /// </summary>
 public sealed class PeScanModule : IScanModule
 {
+    private const int MaximumArtifactValueLength = 512;
+
     private readonly PeImageParser _parser;
     private readonly RuleEngine _ruleEngine;
     private readonly Risk.RiskAssessmentEngine _riskEngine;
@@ -31,26 +33,34 @@ public sealed class PeScanModule : IScanModule
         _ruleOptions = ruleOptions;
     }
 
-    public Task<ScanModuleResult> ScanAsync(ScanTarget target, CancellationToken cancellationToken = default)
+    public async Task<ScanModuleResult> ScanAsync(ScanTarget target, CancellationToken cancellationToken = default)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!Supports(target.Kind))
-                return Task.FromResult(ScanModuleResult.Failure(ModuleId, "This module only accepts PE file targets."));
-
-            // Parse PE file
-            var parseResult = _parser.Parse(target.Value);
-            if (!parseResult.IsSuccess || parseResult.Value == null)
             {
-                return Task.FromResult(ScanModuleResult.Failure(ModuleId, parseResult.ErrorMessage ?? "Failed to parse PE file"));
+                return ScanModuleResult.Failure(ModuleId, "This module only accepts PE file targets.");
             }
 
+            // Parse PE file on a worker thread; the parser is synchronous and checks the token.
+            var parseResult = await Task.Run(
+                () => _parser.Parse(target.Value, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
+
+            if (!parseResult.IsSuccess || parseResult.Value == null)
+            {
+                return ScanModuleResult.Failure(ModuleId, parseResult.ErrorMessage ?? "Failed to parse PE file");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
             var image = parseResult.Value;
 
             // Evaluate rules
             var context = new RuleContext(image, _ruleOptions);
             var findings = _ruleEngine.Evaluate(context);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Assess risk
             var risk = _riskEngine.Assess(findings);
@@ -58,11 +68,15 @@ public sealed class PeScanModule : IScanModule
             // Build artifacts
             var artifacts = BuildArtifacts(image, risk);
 
-            return Task.FromResult(ScanModuleResult.Success(ModuleId, findings, artifacts));
+            return ScanModuleResult.Success(ModuleId, findings, artifacts);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ScanModuleResult.Failure(ModuleId, $"Scan error: {ex.Message}"));
+            return ScanModuleResult.Failure(ModuleId, $"Scan error: {ex.Message}");
         }
     }
 
@@ -97,7 +111,7 @@ public sealed class PeScanModule : IScanModule
         var sectionsProps = new Dictionary<string, string>
         {
             ["Count"] = image.Sections.Count.ToString(),
-            ["Sections"] = string.Join(", ", image.Sections.Select(s => s.Name))
+            ["Sections"] = Limit(string.Join(", ", image.Sections.Select(s => s.Name))) ?? string.Empty
         };
         artifacts.Add(new ScanArtifact("Sections", $"{image.Sections.Count} Section(s)", sectionsProps));
 
@@ -108,7 +122,7 @@ public sealed class PeScanModule : IScanModule
         {
             ["DllCount"] = importList.Count.ToString(),
             ["FunctionCount"] = importCount.ToString(),
-            ["DLLs"] = string.Join(", ", importList.Take(5).Select(dll => dll.DLLName))
+            ["DLLs"] = Limit(string.Join(", ", importList.Take(5).Select(dll => dll.DLLName))) ?? string.Empty
         };
         artifacts.Add(new ScanArtifact("Imports", $"{importCount} Import(s)", importProps));
 
@@ -116,8 +130,8 @@ public sealed class PeScanModule : IScanModule
         var sigProps = new Dictionary<string, string>
         {
             ["State"] = image.Signature.State.ToString(),
-            ["Subject"] = image.Signature.SubjectName ?? "N/A",
-            ["Issuer"] = image.Signature.IssuerName ?? "N/A"
+            ["Subject"] = Limit(image.Signature.SubjectName) ?? "N/A",
+            ["Issuer"] = Limit(image.Signature.IssuerName) ?? "N/A"
         };
         artifacts.Add(new ScanArtifact("Signature", "Code Signature", sigProps));
 
@@ -137,10 +151,24 @@ public sealed class PeScanModule : IScanModule
         return artifacts;
     }
 
+    private static string? Limit(string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        return value.Length <= MaximumArtifactValueLength
+            ? value
+            : value[..MaximumArtifactValueLength] + "...";
+    }
+
     private string FormatTimestamp(uint timestamp)
     {
         if (timestamp == 0)
+        {
             return "0 (null)";
+        }
 
         try
         {
@@ -161,7 +189,9 @@ public sealed class PeScanModule : IScanModule
         {
             string candidate = Path.Combine(customBasePath, fileName);
             if (File.Exists(candidate))
+            {
                 return candidate;
+            }
         }
 
         string baseDir = AppContext.BaseDirectory;
@@ -175,7 +205,9 @@ public sealed class PeScanModule : IScanModule
         foreach (string candidate in candidates)
         {
             if (File.Exists(candidate))
+            {
                 return candidate;
+            }
         }
 
         // Search upward in development workspaces
@@ -184,11 +216,15 @@ public sealed class PeScanModule : IScanModule
         {
             string candidate = Path.Combine(currentDir.FullName, "Core", "Rules", "catalogs", fileName);
             if (File.Exists(candidate))
+            {
                 return candidate;
+            }
 
             candidate = Path.Combine(currentDir.FullName, "Rules", "catalogs", fileName);
             if (File.Exists(candidate))
+            {
                 return candidate;
+            }
 
             currentDir = currentDir.Parent;
         }
@@ -220,14 +256,28 @@ public sealed class PeScanModule : IScanModule
 
                     if (thresholdsData.TryGetValue("entropy", out var entropySection))
                     {
-                        if (entropySection.TryGetProperty("highThreshold", out var highProp)) highEntropy = highProp.GetDouble();
-                        if (entropySection.TryGetProperty("mediumThreshold", out var medProp)) mediumEntropy = medProp.GetDouble();
+                        if (entropySection.TryGetProperty("highThreshold", out var highProp))
+                        {
+                            highEntropy = highProp.GetDouble();
+                        }
+
+                        if (entropySection.TryGetProperty("mediumThreshold", out var medProp))
+                        {
+                            mediumEntropy = medProp.GetDouble();
+                        }
                     }
 
                     if (thresholdsData.TryGetValue("overlay", out var overlaySection))
                     {
-                        if (overlaySection.TryGetProperty("sizeBytes", out var sizeProp)) overlayBytes = sizeProp.GetInt64();
-                        if (overlaySection.TryGetProperty("percentageOfFile", out var pctProp)) overlayPercent = pctProp.GetDouble();
+                        if (overlaySection.TryGetProperty("sizeBytes", out var sizeProp))
+                        {
+                            overlayBytes = sizeProp.GetInt64();
+                        }
+
+                        if (overlaySection.TryGetProperty("percentageOfFile", out var pctProp))
+                        {
+                            overlayPercent = pctProp.GetDouble();
+                        }
                     }
 
                     options.Thresholds = new RuleThresholds
@@ -247,7 +297,9 @@ public sealed class PeScanModule : IScanModule
                 string json = File.ReadAllText(apisPath);
                 var catalog = JsonSerializer.Deserialize<RiskyApiCatalog>(json, jsonOptions);
                 if (catalog != null)
+                {
                     options.Catalogs.RiskyApis = catalog;
+                }
             }
 
             // Load section names (case-insensitive for proper object mapping)
@@ -257,7 +309,9 @@ public sealed class PeScanModule : IScanModule
                 string json = File.ReadAllText(sectionsPath);
                 var catalog = JsonSerializer.Deserialize<SuspiciousSectionNamesCatalog>(json, jsonOptions);
                 if (catalog != null)
+                {
                     options.Catalogs.SectionNames = catalog;
+                }
             }
         }
         catch

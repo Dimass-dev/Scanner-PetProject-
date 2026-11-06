@@ -21,7 +21,9 @@ public static class ScopedHttpClientFactory
                     ?? throw new HttpRequestException("The request URL is missing.");
 
                 if (!policy.TryValidate(requestUri, out string validationError))
+                {
                     throw new HttpRequestException(validationError);
+                }
 
                 IPAddress[] addresses = IPAddress.TryParse(requestUri.Host, out var literalAddress)
                     ? [literalAddress]
@@ -44,7 +46,9 @@ public static class ScopedHttpClientFactory
                         client.Dispose();
                         lastError = exception;
                         if (exception is OperationCanceledException)
+                        {
                             throw;
+                        }
                     }
                 }
 

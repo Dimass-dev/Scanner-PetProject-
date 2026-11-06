@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using Core.Models;
 using Core.Scanning;
-using System.Text.RegularExpressions;
 
 namespace Core.Rules.BuiltIn;
 
@@ -26,7 +26,7 @@ public sealed class WritableExecutableSectionRule : IRule
                     Category: Category,
                     Severity: ScanSeverity.Critical,
                     Description: $"Section '{section.Name}' has both WRITE and EXECUTE permissions. This is extremely unusual and often indicates code injection or self-modifying code.",
-                    Evidence: $"Section: {section.Name}, Characteristics: 0x{section.Characteristics:X8}",
+                    Evidence: $"Section: {section.Name}, Characteristics: 0x{(uint)section.Characteristics:X8}",
                     Recommendation: "Investigate this binary for malware. Legitimate software rarely uses RWX sections.",
                     StandardReference: "CWE-766: Critical Data Element Declared Public");
             }
@@ -45,7 +45,9 @@ public sealed class SuspiciousEntryPointRule : IRule
     {
         uint entryPoint = context.Image.Header.AddressOfEntryPoint;
         if (entryPoint == 0)
+        {
             yield break;
+        }
 
         // Find section containing entry point
         SingleSectionInfo? entrySection = null;
@@ -87,7 +89,7 @@ public sealed class SuspiciousEntryPointRule : IRule
                 Category: Category,
                 Severity: ScanSeverity.High,
                 Description: $"The entry point is in section '{entrySection.Name}' which is not marked as executable.",
-                Evidence: $"Section: {entrySection.Name}, EntryPoint: 0x{entryPoint:X}, Characteristics: 0x{entrySection.Characteristics:X8}",
+                Evidence: $"Section: {entrySection.Name}, EntryPoint: 0x{entryPoint:X}, Characteristics: 0x{(uint)entrySection.Characteristics:X8}",
                 Recommendation: "This may indicate packing or malicious modification.",
                 StandardReference: null);
         }
@@ -163,11 +165,15 @@ public sealed class HighEntropySectionRule : IRule
         {
             // Skip resource sections (they naturally have high entropy)
             if (entropy.IsResource)
+            {
                 continue;
+            }
 
             // Only check executable sections
             if (!entropy.IsExecutable)
+            {
                 continue;
+            }
 
             if (entropy.Entropy >= thresholds.HighEntropyThreshold)
             {
@@ -210,7 +216,9 @@ public sealed class OverlayRule : IRule
         var thresholds = context.Options.Thresholds;
 
         if (overlay.Size == 0)
+        {
             yield break;
+        }
 
         double percentage = (double)overlay.Size / context.Image.FileSize;
 

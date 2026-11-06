@@ -1,12 +1,13 @@
 namespace Core.Models;
+
 public class SingleSectionInfo
 {
-    public string SectionName{get;init;} = "";
-    public uint VirtualSize{get;init;}
-    public uint VirtualAddress{get;init;}
-    public uint SizeOfRawData{get;init;}
-    public uint PointerToRawData{get;init;}
-    public SectionFlag Characteristics{get;init;}
+    public string SectionName { get; init; } = "";
+    public uint VirtualSize { get; init; }
+    public uint VirtualAddress { get; init; }
+    public uint SizeOfRawData { get; init; }
+    public uint PointerToRawData { get; init; }
+    public SectionFlag Characteristics { get; init; }
     public string Name => SectionName;
     public SectionFlag Flags => Characteristics;
 }

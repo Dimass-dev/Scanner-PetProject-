@@ -1,7 +1,8 @@
-using Core.Models;
-using Core.Models.ImportDLL;
 using System.Buffers.Binary;
 using System.Text;
+using Core.Analysis;
+using Core.Models;
+using Core.Models.ImportDLL;
 
 namespace Core.Parsing;
 
@@ -10,61 +11,31 @@ namespace Core.Parsing;
 /// </summary>
 public sealed class DelayImportParser
 {
+    private const int DescriptorSize = 32;
+    private const int MaximumDescriptors = 100;
+    private const int MaximumThunksPerLibrary = 1000;
+    private const int MaximumStringLength = 256;
+
     /// <summary>Parse delay import directory.</summary>
-    public IReadOnlyList<ImportedDLL> Parse(string filePath, HPInfo header, IReadOnlyList<SingleSectionInfo> sections)
+    public IReadOnlyList<ImportedDLL> Parse(
+        string filePath,
+        HPInfo header,
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
     {
         if (header.DelayImportDirectoryRVA == 0 || header.DelayImportDirectorySize == 0)
+        {
             return Array.Empty<ImportedDLL>();
+        }
 
         try
         {
-            using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            if (!TryGetFileOffset(header.DelayImportDirectoryRVA, sections, file.Length, header.SizeOfHeaders, out uint fileOffset))
-                return Array.Empty<ImportedDLL>();
-
-            var imports = new List<ImportedDLL>();
-            file.Position = fileOffset;
-
-            // Each delay import descriptor is 32 bytes
-            const int descriptorSize = 32;
-            int maxDescriptors = 100; // Safety limit
-
-            for (int i = 0; i < maxDescriptors; i++)
-            {
-                if (file.Position + descriptorSize > file.Length)
-                    break;
-
-                byte[] descriptor = new byte[descriptorSize];
-                if (file.Read(descriptor) < descriptorSize)
-                    break;
-
-                uint attributes = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(0));
-                uint dllNameRva = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(4));
-                uint moduleHandle = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(8));
-                uint delayIAT = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(12));
-                uint delayINT = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(16));
-
-                // Null descriptor marks end
-                if (dllNameRva == 0)
-                    break;
-
-                // Read DLL name
-                if (!TryGetFileOffset(dllNameRva, sections, file.Length, header.SizeOfHeaders, out uint dllNameOffset))
-                    continue;
-
-                string? dllName = ReadNullTerminatedString(file, dllNameOffset);
-                if (string.IsNullOrEmpty(dllName))
-                    continue;
-
-                // Parse import names (from INT or IAT)
-                uint namesRva = delayINT != 0 ? delayINT : delayIAT;
-                var functions = ParseImportNames(file, sections, header.SizeOfHeaders, namesRva, header.IsPE32Plus);
-
-                var dll = new ImportedDLL(dllName, functions);
-                imports.Add(dll);
-            }
-
-            return imports;
+            using var reader = PeFileReader.Open(filePath);
+            return Parse(reader, header, sections, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
@@ -72,34 +43,136 @@ public sealed class DelayImportParser
         }
     }
 
-    private List<string> ParseImportNames(FileStream file, IReadOnlyList<SingleSectionInfo> sections, uint sizeOfHeaders, uint namesRva, bool isPe64)
+    public IReadOnlyList<ImportedDLL> Parse(
+        PeFileReader reader,
+        HPInfo header,
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(header);
+        ArgumentNullException.ThrowIfNull(sections);
+
+        if (header.DelayImportDirectoryRVA == 0 || header.DelayImportDirectorySize == 0)
+        {
+            return Array.Empty<ImportedDLL>();
+        }
+
+        try
+        {
+            if (!TryGetFileOffset(
+                header.DelayImportDirectoryRVA,
+                sections,
+                reader.Length,
+                header.SizeOfHeaders,
+                out long directoryOffset))
+            {
+                return Array.Empty<ImportedDLL>();
+            }
+
+            var imports = new List<ImportedDLL>();
+            long descriptorLimit = Math.Min(
+                header.DelayImportDirectorySize / DescriptorSize,
+                MaximumDescriptors);
+
+            for (int i = 0; i < descriptorLimit; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                long descriptorOffset = directoryOffset + i * DescriptorSize;
+                if (!reader.IsRangeWithinFile(descriptorOffset, DescriptorSize))
+                {
+                    break;
+                }
+
+                byte[] descriptor = new byte[DescriptorSize];
+                reader.ReadExactly(descriptorOffset, descriptor, cancellationToken);
+
+                uint dllNameRva = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(4));
+                uint delayIAT = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(12));
+                uint delayINT = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(16));
+
+                // Null descriptor marks end
+                if (dllNameRva == 0)
+                {
+                    break;
+                }
+
+                if (!TryGetFileOffset(dllNameRva, sections, reader.Length, header.SizeOfHeaders, out long dllNameOffset))
+                {
+                    continue;
+                }
+
+                string? dllName = ReadNullTerminatedString(reader, dllNameOffset, cancellationToken);
+                if (string.IsNullOrEmpty(dllName))
+                {
+                    continue;
+                }
+
+                // Parse import names (from INT or IAT)
+                uint namesRva = delayINT != 0 ? delayINT : delayIAT;
+                var functions = ParseImportNames(
+                    reader,
+                    sections,
+                    header.SizeOfHeaders,
+                    namesRva,
+                    header.IsPE32Plus,
+                    cancellationToken);
+
+                imports.Add(new ImportedDLL(dllName, functions));
+            }
+
+            return imports;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return Array.Empty<ImportedDLL>();
+        }
+    }
+
+    private List<string> ParseImportNames(
+        PeFileReader reader,
+        IReadOnlyList<SingleSectionInfo> sections,
+        uint sizeOfHeaders,
+        uint namesRva,
+        bool isPe64,
+        CancellationToken cancellationToken)
     {
         var functions = new List<string>();
 
-        if (namesRva == 0 || !TryGetFileOffset(namesRva, sections, file.Length, sizeOfHeaders, out uint namesOffset))
+        if (namesRva == 0 ||
+            !TryGetFileOffset(namesRva, sections, reader.Length, sizeOfHeaders, out long namesOffset))
+        {
             return functions;
-
-        long savedPos = file.Position;
-        file.Position = namesOffset;
+        }
 
         int entrySize = isPe64 ? 8 : 4;
-        int maxEntries = 1000;
 
-        for (int i = 0; i < maxEntries; i++)
+        for (int i = 0; i < MaximumThunksPerLibrary; i++)
         {
-            if (file.Position + entrySize > file.Length)
+            cancellationToken.ThrowIfCancellationRequested();
+
+            long entryOffset = namesOffset + (long)i * entrySize;
+            if (!reader.IsRangeWithinFile(entryOffset, entrySize))
+            {
                 break;
+            }
 
             byte[] entryBytes = new byte[entrySize];
-            if (file.Read(entryBytes) < entrySize)
-                break;
+            reader.ReadExactly(entryOffset, entryBytes, cancellationToken);
 
             ulong entry = isPe64
                 ? BinaryPrimitives.ReadUInt64LittleEndian(entryBytes)
                 : BinaryPrimitives.ReadUInt32LittleEndian(entryBytes);
 
             if (entry == 0)
+            {
                 break;
+            }
 
             // Check if import by ordinal
             ulong ordinalFlag = isPe64 ? 0x8000000000000000UL : 0x80000000UL;
@@ -107,29 +180,39 @@ public sealed class DelayImportParser
             {
                 ushort ordinal = (ushort)(entry & 0xFFFF);
                 functions.Add($"#{ordinal}");
+                continue;
             }
-            else
+
+            uint nameRva = (uint)(entry & 0x7FFFFFFF);
+            if (TryGetFileOffset(nameRva, sections, reader.Length, sizeOfHeaders, out long nameOffset))
             {
-                // Import by name
-                uint nameRva = (uint)(entry & 0x7FFFFFFF);
-                if (TryGetFileOffset(nameRva, sections, file.Length, sizeOfHeaders, out uint nameOffset))
+                string? funcName = ReadImportName(reader, nameOffset, cancellationToken);
+                if (!string.IsNullOrEmpty(funcName))
                 {
-                    string? funcName = ReadImportName(file, nameOffset);
-                    if (!string.IsNullOrEmpty(funcName))
-                        functions.Add(funcName);
+                    functions.Add(funcName);
                 }
             }
         }
 
-        file.Position = savedPos;
         return functions;
     }
 
-    private static bool TryGetFileOffset(uint rva, IReadOnlyList<SingleSectionInfo> sections, long fileLength, uint sizeOfHeaders, out uint fileOffset)
+    private static bool TryGetFileOffset(
+        uint rva,
+        IReadOnlyList<SingleSectionInfo> sections,
+        long fileLength,
+        uint sizeOfHeaders,
+        out long fileOffset)
     {
-        if (RVAConverter.TryConvertRvaToFileOffset(rva, sections, sizeOfHeaders, fileLength, out long offset, out _, out _) && offset <= uint.MaxValue)
+        if (RVAConverter.TryConvertRvaToFileOffset(
+            rva,
+            sections,
+            sizeOfHeaders,
+            fileLength,
+            out fileOffset,
+            out _,
+            out _))
         {
-            fileOffset = (uint)offset;
             return true;
         }
 
@@ -137,46 +220,65 @@ public sealed class DelayImportParser
         return false;
     }
 
-    private string? ReadNullTerminatedString(FileStream file, uint offset, int maxLength = 256)
+    private static string? ReadNullTerminatedString(
+        PeFileReader reader,
+        long offset,
+        CancellationToken cancellationToken)
     {
-        long savedPos = file.Position;
-        file.Position = offset;
+        int available = (int)Math.Min(MaximumStringLength, reader.Length - offset);
+        if (available <= 0)
+        {
+            return null;
+        }
 
-        byte[] buffer = new byte[maxLength];
-        int bytesRead = file.Read(buffer);
+        byte[] buffer = new byte[available];
+        int bytesRead = reader.Read(offset, buffer);
+        if (bytesRead <= 0)
+        {
+            return null;
+        }
 
         int nullIndex = Array.IndexOf(buffer, (byte)0, 0, bytesRead);
         if (nullIndex < 0)
+        {
             nullIndex = bytesRead;
+        }
 
-        file.Position = savedPos;
-
-        if (nullIndex == 0)
-            return null;
-
-        return Encoding.UTF8.GetString(buffer, 0, nullIndex);
+        return nullIndex == 0
+            ? null
+            : Encoding.UTF8.GetString(buffer, 0, nullIndex);
     }
 
-    private string? ReadImportName(FileStream file, uint offset)
+    private static string? ReadImportName(
+        PeFileReader reader,
+        long offset,
+        CancellationToken cancellationToken)
     {
-        long savedPos = file.Position;
-        file.Position = offset;
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Skip hint (2 bytes)
-        file.Position += 2;
+        long nameOffset = offset + 2;
+        int available = (int)Math.Min(MaximumStringLength, reader.Length - nameOffset);
+        if (available <= 0)
+        {
+            return null;
+        }
 
-        byte[] buffer = new byte[256];
-        int bytesRead = file.Read(buffer);
+        byte[] buffer = new byte[available];
+        int bytesRead = reader.Read(nameOffset, buffer);
+        if (bytesRead <= 0)
+        {
+            return null;
+        }
 
         int nullIndex = Array.IndexOf(buffer, (byte)0, 0, bytesRead);
         if (nullIndex < 0)
+        {
             nullIndex = bytesRead;
+        }
 
-        file.Position = savedPos;
-
-        if (nullIndex == 0)
-            return null;
-
-        return Encoding.UTF8.GetString(buffer, 0, nullIndex);
+        return nullIndex == 0
+            ? null
+            : Encoding.UTF8.GetString(buffer, 0, nullIndex);
     }
 }

@@ -1,10 +1,9 @@
+using Core.ImpParser;
 using Core.Models;
 using Core.Models.ImportDLL;
+using Core.Parsing;
 using Core.PE;
 using Core.Sections;
-using Core.ImpParser;
-using Core.Parsing;
-using System.Buffers.Binary;
 
 namespace Core.Analysis;
 
@@ -44,50 +43,79 @@ public sealed class PeImageParser
     }
 
     /// <summary>Parse PE file into immutable aggregate.</summary>
-    public Result<PeImage> Parse(string filePath)
+    public Result<PeImage> Parse(string filePath, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(filePath))
+        {
             return Result<PeImage>.Fail($"File not found: {filePath}");
+        }
 
         try
         {
-            var fileInfo = new FileInfo(filePath);
+            using var reader = PeFileReader.Open(filePath);
+            return Parse(reader, filePath, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return Result<PeImage>.Fail($"Error parsing PE file: {ex.Message}");
+        }
+    }
+
+    /// <summary>Parse PE file through an already-open reader.</summary>
+    public Result<PeImage> Parse(
+        PeFileReader reader,
+        string filePath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Parse header
-            var headerResult = _headerParser.Parse(filePath);
+            var headerResult = _headerParser.Parse(reader, cancellationToken);
             if (!headerResult.IsSuccess || headerResult.Info == null)
+            {
                 return Result<PeImage>.Fail(headerResult.ErrorMessage ?? "Failed to parse header");
+            }
 
             var header = headerResult.Info;
 
             // Parse sections
-            var sectionsResult = _sectionParser.Parse(filePath, header);
+            var sectionsResult = _sectionParser.Parse(reader, header, cancellationToken);
             if (!sectionsResult.IsSuccess)
+            {
                 return Result<PeImage>.Fail(sectionsResult.ErrorMessage ?? "Failed to parse sections");
+            }
 
             IReadOnlyList<SingleSectionInfo> sections = sectionsResult.SectionInfo ?? new List<SingleSectionInfo>();
 
             // Calculate entropy for sections
-            var entropy = _entropyScanner.CalculateEntropy(filePath, sections);
+            var entropy = _entropyScanner.CalculateEntropy(reader, sections, cancellationToken);
 
             // Parse imports using existing ImportedParser
-            var imports = _importedParser.Parse(filePath, header, sections);
+            var imports = _importedParser.Parse(reader, header, sections, cancellationToken);
 
             // Parse delay imports
-            var delayImports = _delayImportParser.Parse(filePath, header, sections);
+            var delayImports = _delayImportParser.Parse(reader, header, sections, cancellationToken);
 
             // Parse load config
-            var loadConfig = _loadConfigParser.Parse(filePath, header, sections);
+            var loadConfig = _loadConfigParser.Parse(reader, header, sections, cancellationToken);
 
             // Parse certificate
-            var signature = _certificateParser.Parse(filePath, header);
+            var signature = _certificateParser.Parse(reader, header, filePath, cancellationToken);
 
             // Scan overlay (accounting for Security Directory)
-            var overlay = _overlayScanner.Scan(filePath, sections, header);
+            var overlay = _overlayScanner.Scan(reader, sections, header, cancellationToken);
 
             var peImage = new PeImage(
                 Path: filePath,
-                FileSize: fileInfo.Length,
+                FileSize: reader.Length,
                 Header: header,
                 Sections: sections,
                 Entropy: entropy,
@@ -98,6 +126,10 @@ public sealed class PeImageParser
                 Overlay: overlay);
 
             return Result<PeImage>.Success(peImage);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

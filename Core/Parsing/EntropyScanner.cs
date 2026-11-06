@@ -11,16 +11,31 @@ public sealed class EntropyScanner
     private const int ChunkSize = 65536;
 
     /// <summary>Calculate entropy for all sections.</summary>
-    public IReadOnlyList<SectionEntropy> CalculateEntropy(string filePath, IReadOnlyList<SingleSectionInfo> sections)
+    public IReadOnlyList<SectionEntropy> CalculateEntropy(
+        string filePath,
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
     {
-        var results = new List<SectionEntropy>();
+        using var reader = PeFileReader.Open(filePath);
+        return CalculateEntropy(reader, sections, cancellationToken);
+    }
 
-        using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        long fileLength = file.Length;
+    public IReadOnlyList<SectionEntropy> CalculateEntropy(
+        PeFileReader reader,
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(sections);
+
+        var results = new List<SectionEntropy>(sections.Count);
+        long fileLength = reader.Length;
         Span<long> frequency = stackalloc long[256];
 
         foreach (var section in sections)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (section.SizeOfRawData == 0 || section.PointerToRawData >= fileLength)
             {
                 results.Add(new SectionEntropy(
@@ -50,19 +65,27 @@ public sealed class EntropyScanner
             // Stream section data to count byte frequencies without large memory allocation
             frequency.Clear();
 
-            file.Position = section.PointerToRawData;
-            byte[] buffer = new byte[ChunkSize];
             long bytesRemaining = availableBytes;
+            byte[] buffer = new byte[ChunkSize];
 
             while (bytesRemaining > 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 int toRead = (int)Math.Min(buffer.Length, bytesRemaining);
-                int bytesRead = file.Read(buffer, 0, toRead);
+                int bytesRead = reader.Read(
+                    section.PointerToRawData + (availableBytes - bytesRemaining),
+                    buffer.AsSpan(0, toRead));
+
                 if (bytesRead == 0)
+                {
                     break;
+                }
 
                 for (int i = 0; i < bytesRead; i++)
+                {
                     frequency[buffer[i]]++;
+                }
 
                 bytesRemaining -= bytesRead;
             }
@@ -85,7 +108,9 @@ public sealed class EntropyScanner
     private static double CalculateShannonEntropyFromFrequencies(ReadOnlySpan<long> frequency, long totalBytes)
     {
         if (totalBytes <= 0)
+        {
             return 0.0;
+        }
 
         double entropy = 0.0;
         double dataLength = totalBytes;
@@ -93,7 +118,9 @@ public sealed class EntropyScanner
         for (int i = 0; i < 256; i++)
         {
             if (frequency[i] == 0)
+            {
                 continue;
+            }
 
             double probability = frequency[i] / dataLength;
             entropy -= probability * Math.Log2(probability);

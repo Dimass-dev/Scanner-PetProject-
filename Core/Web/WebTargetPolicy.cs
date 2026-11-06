@@ -39,16 +39,22 @@ public sealed class WebTargetPolicy(WebScannerOptions options)
     public bool IsAddressAllowed(Uri uri, IPAddress address)
     {
         if (address.IsIPv4MappedToIPv6)
+        {
             address = address.MapToIPv4();
+        }
 
         bool isLoopbackHost = uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
             IPAddress.TryParse(uri.Host, out var targetIp) && IPAddress.IsLoopback(targetIp);
 
         if (isLoopbackHost)
+        {
             return IPAddress.IsLoopback(address);
+        }
 
         if (!options.AllowPrivateNetworkTargets && IsNonPublicAddress(address))
+        {
             return false;
+        }
 
         return true;
     }
@@ -56,11 +62,15 @@ public sealed class WebTargetPolicy(WebScannerOptions options)
     public IPAddress[] ValidateResolvedAddresses(Uri uri, IEnumerable<IPAddress> addresses)
     {
         if (!TryValidate(uri, out string error))
+        {
             throw new HttpRequestException(error);
+        }
 
         IPAddress[] resolved = addresses.ToArray();
         if (resolved.Length == 0 || resolved.Any(address => !IsAddressAllowed(uri, address)))
+        {
             throw new HttpRequestException("The target hostname resolves to a blocked address.");
+        }
 
         return resolved;
     }
@@ -73,7 +83,9 @@ public sealed class WebTargetPolicy(WebScannerOptions options)
     public static bool IsNonPublicAddress(IPAddress address)
     {
         if (IPAddress.IsLoopback(address) || address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast)
+        {
             return true;
+        }
 
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {
@@ -85,7 +97,9 @@ public sealed class WebTargetPolicy(WebScannerOptions options)
         }
 
         if (address.AddressFamily != AddressFamily.InterNetwork)
+        {
             return true;
+        }
 
         byte[] bytes = address.GetAddressBytes();
         return bytes[0] == 0 || bytes[0] >= 224 ||
@@ -108,7 +122,9 @@ public sealed class WebTargetPolicy(WebScannerOptions options)
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
             !string.IsNullOrEmpty(uri.UserInfo) || uri.AbsolutePath != "/" ||
             !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+        {
             return null;
+        }
 
         return uri;
     }

@@ -27,23 +27,43 @@ public sealed class AuthRateLimitProbe(WebScannerOptions options, HttpClient htt
     public async Task<AuthRateLimitProbeResult> RunAsync(AuthRateLimitProbeRequest request, CancellationToken cancellationToken = default)
     {
         if (!request.ConfirmedControlledTestAccount)
+        {
             throw new InvalidOperationException("Confirm that this is a dedicated test account on a system you may assess.");
+        }
+
         if (!Uri.TryCreate(request.TargetUrl, UriKind.Absolute, out Uri? target))
+        {
             throw new InvalidOperationException("A valid allowlisted HTTP(S) target is required.");
+        }
+
         if (!_policy.TryValidate(target, out string scopeError))
+        {
             throw new InvalidOperationException(scopeError);
+        }
+
         bool loopbackTarget = target.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
             IPAddress.TryParse(target.Host, out IPAddress? targetAddress) && IPAddress.IsLoopback(targetAddress);
         if (target.Scheme != Uri.UriSchemeHttps && !loopbackTarget)
+        {
             throw new InvalidOperationException("Login throttling checks require HTTPS for non-loopback targets.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.TestUsername) || request.TestUsername.Length > 128)
+        {
             throw new InvalidOperationException("A test account name of 1 to 128 characters is required.");
+        }
+
         if (request.Attempts is < 1 || request.Attempts > Math.Clamp(options.MaxAuthProbeAttempts, 1, 5))
+        {
             throw new InvalidOperationException($"Attempt count must be from 1 to {Math.Clamp(options.MaxAuthProbeAttempts, 1, 5)}.");
+        }
+
         if (!request.LoginPath.StartsWith('/') || request.LoginPath.StartsWith("//", StringComparison.Ordinal) ||
             request.LoginPath.Contains('?') || request.LoginPath.Contains('#') || request.LoginPath.Contains('\\') ||
             !Uri.TryCreate(target, request.LoginPath, out Uri? loginUri) || !WebTargetPolicy.SameOrigin(target, loginUri))
+        {
             throw new InvalidOperationException("Login path must be an absolute path on the same approved origin, without query or fragment.");
+        }
 
         var statusCodes = new List<int>(request.Attempts);
         int rateLimited = 0;
@@ -58,7 +78,9 @@ public sealed class AuthRateLimitProbe(WebScannerOptions options, HttpClient htt
             {
                 timeout.Token.ThrowIfCancellationRequested();
                 if (index > 0 && delayMs > 0)
+                {
                     await Task.Delay(delayMs, timeout.Token).ConfigureAwait(false);
+                }
 
                 string randomInvalidPassword = $"Invalid-Test-{Guid.NewGuid():N}";
                 string body = JsonSerializer.Serialize(new { username = request.TestUsername, password = randomInvalidPassword });
@@ -70,14 +92,19 @@ public sealed class AuthRateLimitProbe(WebScannerOptions options, HttpClient htt
                 int status = (int)response.StatusCode;
                 statusCodes.Add(status);
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
                     rateLimited++;
+                }
+
                 if (response.StatusCode == HttpStatusCode.Locked)
                 {
                     lockedOut = true;
                     break;
                 }
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
                     break;
+                }
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

@@ -19,7 +19,9 @@ public sealed class ImportedDLL
             if (funcName.StartsWith('#'))
             {
                 if (ushort.TryParse(funcName[1..], out var ordinal))
+                {
                     Functions.Add(new ImportedFunction(null, ordinal, null));
+                }
             }
             else
             {

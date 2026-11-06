@@ -44,7 +44,9 @@ public static class RVAConverter
             ulong mappedSize = Math.Max(rawSize, virtualSize);
             ulong address = rva;
             if (address < start || address - start >= mappedSize)
+            {
                 continue;
+            }
 
             ulong delta = address - start;
             if (delta >= rawSize)

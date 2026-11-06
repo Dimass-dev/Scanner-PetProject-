@@ -12,7 +12,9 @@ public sealed class MissingAslrRule : IRule
     public IEnumerable<ScanFinding> Evaluate(RuleContext context)
     {
         if (context.Image.Header.HasASLR)
+        {
             yield break;
+        }
 
         var severity = context.Image.Header.IsDll ? ScanSeverity.Medium : ScanSeverity.High;
 
@@ -38,7 +40,9 @@ public sealed class MissingDepRule : IRule
     public IEnumerable<ScanFinding> Evaluate(RuleContext context)
     {
         if (context.Image.Header.HasDEP)
+        {
             yield break;
+        }
 
         var severity = context.Image.Header.IsDll ? ScanSeverity.Medium : ScanSeverity.High;
 
@@ -64,7 +68,9 @@ public sealed class MissingCfgRule : IRule
     public IEnumerable<ScanFinding> Evaluate(RuleContext context)
     {
         if (context.Image.Header.HasControlFlowGuard)
+        {
             yield break;
+        }
 
         yield return new ScanFinding(
             RuleId: Id,
@@ -91,15 +97,21 @@ public sealed class MissingSafeSehRule : IRule
     {
         // Only applies to x86
         if (context.Image.Header.Architecture != "x86")
+        {
             yield break;
+        }
 
         // If binary explicitly does not use SEH, SafeSEH is not expected
         if ((context.Image.Header.DllCharacteristics & DllCharacteristicsNoSeh) != 0)
+        {
             yield break;
+        }
 
         // Check if LoadConfig has SafeSEH
         if (context.Image.LoadConfig?.HasSEH == true)
+        {
             yield break;
+        }
 
         yield return new ScanFinding(
             RuleId: Id,
@@ -124,10 +136,14 @@ public sealed class MissingHighEntropyVaRule : IRule
     {
         // Only applies to x64
         if (context.Image.Header.Architecture != "x64")
+        {
             yield break;
+        }
 
         if (context.Image.Header.HasHighEntropyVA)
+        {
             yield break;
+        }
 
         yield return new ScanFinding(
             RuleId: Id,
@@ -151,7 +167,9 @@ public sealed class CfgMismatchRule : IRule
     public IEnumerable<ScanFinding> Evaluate(RuleContext context)
     {
         if (!context.Image.Header.HasControlFlowGuard)
+        {
             yield break;
+        }
 
         // Check if LoadConfig has CFG instrumentation
         if (context.Image.LoadConfig?.IsCFInstrumented == false)

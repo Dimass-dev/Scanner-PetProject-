@@ -1,8 +1,8 @@
+using Core.ImpParser;
 using Core.Models;
+using Core.Models.ImportDLL;
 using Core.Scanning;
 using Core.Sections;
-using Core.ImpParser;
-using Core.Models.ImportDLL;
 
 namespace Core.PE;
 
@@ -21,21 +21,29 @@ public sealed class PeAnalysisModule(
         ArgumentNullException.ThrowIfNull(target);
         cancellationToken.ThrowIfCancellationRequested();
         if (!Supports(target.Kind))
+        {
             return Task.FromResult(ScanModuleResult.Failure(ModuleId, "This module only accepts PE file targets."));
+        }
 
-        HPResult headerResult = headerParser.Parse(target.Value);
+        HPResult headerResult = headerParser.Parse(target.Value, cancellationToken);
         if (!headerResult.IsSuccess || headerResult.Info is null)
+        {
             return Task.FromResult(ScanModuleResult.Failure(ModuleId, headerResult.ErrorMessage ?? "PE headers could not be read."));
+        }
 
         HPInfo header = headerResult.Info;
-        SingleSectionResult sectionResult = sectionParser.Parse(target.Value, header);
+        SingleSectionResult sectionResult = sectionParser.Parse(target.Value, header, cancellationToken);
         if (!sectionResult.IsSuccess || sectionResult.SectionInfo is null)
+        {
             return Task.FromResult(ScanModuleResult.Failure(ModuleId, sectionResult.ErrorMessage ?? "PE sections could not be read."));
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
-        ImportParseResult importResult = importedParser.Parse(target.Value, header, sectionResult.SectionInfo);
+        ImportParseResult importResult = importedParser.Parse(target.Value, header, sectionResult.SectionInfo, cancellationToken);
         if (!importResult.IsSuccess)
+        {
             return Task.FromResult(ScanModuleResult.Failure(ModuleId, importResult.ErrorMessage ?? "PE imports could not be read."));
+        }
 
         var artifacts = new List<ScanArtifact>
         {
@@ -78,9 +86,15 @@ public sealed class PeAnalysisModule(
             {
                 var properties = new Dictionary<string, string>();
                 if (function.Hint is ushort hint)
+                {
                     properties["Hint"] = hint.ToString();
+                }
+
                 if (function.Ordinal is ushort ordinal)
+                {
                     properties["Ordinal"] = ordinal.ToString();
+                }
+
                 artifacts.Add(new ScanArtifact("pe.import-function", function.DisplayName, properties));
             }
         }

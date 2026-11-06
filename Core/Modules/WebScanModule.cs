@@ -19,12 +19,19 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
     public async Task<ScanModuleResult> ScanAsync(ScanTarget target, CancellationToken cancellationToken = default)
     {
         if (target.Kind != ScanTargetKind.WebApplication)
+        {
             return ScanModuleResult.Failure(ModuleId, "This module only accepts web application targets.");
+        }
 
         if (!Uri.TryCreate(target.Value, UriKind.Absolute, out Uri? startUri))
+        {
             return ScanModuleResult.Failure(ModuleId, "The target URL is invalid.");
+        }
+
         if (!_targetPolicy.TryValidate(startUri, out string validationError))
+        {
             return ScanModuleResult.Failure(ModuleId, validationError);
+        }
 
         using var scanCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         scanCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(options.MaxScanSeconds, 1, 300)));
@@ -48,10 +55,14 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                 scanCts.Token.ThrowIfCancellationRequested();
                 var (pageUri, depth) = queued.Dequeue();
                 if (!visited.Add(pageUri.AbsoluteUri))
+                {
                     continue;
+                }
 
                 if (requestCount > 0 && delayMilliseconds > 0)
+                {
                     await Task.Delay(delayMilliseconds, scanCts.Token).ConfigureAwait(false);
+                }
 
                 using var request = new HttpRequestMessage(HttpMethod.Get, pageUri);
                 request.Headers.UserAgent.Add(new ProductInfoHeaderValue("LocalWebSecurityScanner", "1.0"));
@@ -80,7 +91,10 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                         }
 
                         if (delayMilliseconds > 0)
+                        {
                             await Task.Delay(delayMilliseconds, scanCts.Token).ConfigureAwait(false);
+                        }
+
                         response.Dispose();
                         pageUri = next;
                         visited.Add(pageUri.AbsoluteUri);
@@ -104,7 +118,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                     byte[] body = await ReadBoundedBodyAsync(response.Content, options.MaxResponseBytes, scanCts.Token).ConfigureAwait(false);
                     if (body.Length >= Math.Clamp(options.MaxResponseBytes, 1024, 10 * 1024 * 1024) ||
                         response.Content.Headers.ContentLength > options.MaxResponseBytes)
+                    {
                         skippedCount++;
+                    }
 
                     if (depth < 2 && string.Equals(contentType, "text/html", StringComparison.OrdinalIgnoreCase))
                     {
@@ -112,9 +128,14 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                         foreach (Uri link in ExtractLinks(pageUri, html))
                         {
                             if (visited.Contains(link.AbsoluteUri) || queued.Count + pageCount >= Math.Clamp(options.MaxPages, 1, 50))
+                            {
                                 continue;
+                            }
+
                             if (WebTargetPolicy.SameOrigin(startUri!, link) && _targetPolicy.TryValidate(link, out _))
+                            {
                                 queued.Enqueue((link, depth + 1));
+                            }
                         }
                     }
                 }
@@ -130,13 +151,21 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                 foreach (string visitedUrl in visited.Where(value => Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) && !string.IsNullOrEmpty(uri.Query)).Take(activeBudget))
                 {
                     if (activeProbesRun >= activeBudget || requestCount >= Math.Clamp(options.MaxRequests, 1, 100))
+                    {
                         break;
+                    }
+
                     if (!Uri.TryCreate(visitedUrl, UriKind.Absolute, out Uri? candidate) ||
                         !TryCreateQueryProbe(candidate, "'", out Uri? probeUri))
+                    {
                         continue;
+                    }
 
                     if (delayMilliseconds > 0)
+                    {
                         await Task.Delay(delayMilliseconds, scanCts.Token).ConfigureAwait(false);
+                    }
+
                     using var probeRequest = new HttpRequestMessage(HttpMethod.Get, probeUri);
                     probeRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("LocalWebSecurityScanner", "1.0"));
                     using HttpResponseMessage probeResponse = await httpClient.SendAsync(
@@ -158,7 +187,10 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                         if (TryCreateQueryProbe(candidate!, marker, out Uri? reflectionUri))
                         {
                             if (delayMilliseconds > 0)
+                            {
                                 await Task.Delay(delayMilliseconds, scanCts.Token).ConfigureAwait(false);
+                            }
+
                             using var reflectionRequest = new HttpRequestMessage(HttpMethod.Get, reflectionUri);
                             reflectionRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("LocalWebSecurityScanner", "1.0"));
                             using HttpResponseMessage reflectionResponse = await httpClient.SendAsync(
@@ -185,11 +217,19 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                     foreach (OpenApiGetRoute route in GetOpenApiGetRoutes(target.OpenApiDocument, startUri!))
                     {
                         if (activeProbesRun >= activeBudget || requestCount >= Math.Clamp(options.MaxRequests, 1, 100))
+                        {
                             break;
+                        }
+
                         if (!WebTargetPolicy.SameOrigin(startUri!, route.Uri) || !_targetPolicy.TryValidate(route.Uri, out _))
+                        {
                             continue;
+                        }
+
                         if (delayMilliseconds > 0)
+                        {
                             await Task.Delay(delayMilliseconds, scanCts.Token).ConfigureAwait(false);
+                        }
 
                         using var apiRequest = new HttpRequestMessage(HttpMethod.Get, route.Uri);
                         apiRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("LocalWebSecurityScanner", "1.0"));
@@ -253,7 +293,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
             }
 
             if (queued.Count > 0)
+            {
                 skippedCount += queued.Count;
+            }
 
             if (startUri!.Scheme == Uri.UriSchemeHttp)
             {
@@ -263,7 +305,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
             }
 
             if (!string.IsNullOrWhiteSpace(target.OpenApiDocument))
+            {
                 AnalyzeOpenApi(target.OpenApiDocument, startUri, findings, artifacts);
+            }
 
             artifacts.Add(new ScanArtifact("web.coverage", "Passive baseline coverage", new Dictionary<string, string>
             {
@@ -284,7 +328,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
         catch (OperationCanceledException) when (scanCts.IsCancellationRequested)
         {
             if (cancellationToken.IsCancellationRequested)
+            {
                 throw;
+            }
 
             return ScanModuleResult.Failure(ModuleId, $"Web scan stopped after its {options.MaxScanSeconds}-second time limit.");
         }
@@ -309,34 +355,50 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
     {
         bool isHtml = response.Content.Headers.ContentType?.MediaType?.Equals("text/html", StringComparison.OrdinalIgnoreCase) == true;
         if (uri.Scheme == Uri.UriSchemeHttps && !response.Headers.Contains("Strict-Transport-Security"))
+        {
             findings.Add(Finding("WEB-HEAD-001", "HSTS header is missing", ScanSeverity.Low,
                 "HTTPS response does not include Strict-Transport-Security.", uri.AbsolutePath, "High"));
+        }
 
         if (isHtml && !response.Headers.Contains("Content-Security-Policy"))
+        {
             findings.Add(Finding("WEB-HEAD-002", "Content Security Policy is missing", ScanSeverity.Low,
                 "HTML response does not include Content-Security-Policy. Review whether a policy can reduce script injection impact.", uri.AbsolutePath, "High"));
+        }
 
         if (isHtml && !response.Headers.Contains("X-Content-Type-Options"))
+        {
             findings.Add(Finding("WEB-HEAD-003", "MIME sniffing protection is missing", ScanSeverity.Low,
                 "HTML response does not include X-Content-Type-Options: nosniff.", uri.AbsolutePath, "High"));
+        }
 
         if (isHtml && !response.Headers.Contains("Referrer-Policy"))
+        {
             findings.Add(Finding("WEB-HEAD-004", "Referrer-Policy is missing", ScanSeverity.Informational,
                 "HTML response does not include an explicit Referrer-Policy.", uri.AbsolutePath, "High"));
+        }
 
         if (isHtml && !response.Headers.Contains("X-Frame-Options") &&
             !(response.Headers.TryGetValues("Content-Security-Policy", out IEnumerable<string>? policies) &&
               policies.Any(policy => policy.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase))))
+        {
             findings.Add(Finding("WEB-HEAD-005", "Framing restriction is missing", ScanSeverity.Low,
                 "No X-Frame-Options or CSP frame-ancestors directive was found on the HTML response.", uri.AbsolutePath, "Medium"));
+        }
 
         if (response.Headers.Server.Count > 0 || response.Headers.Contains("X-Powered-By"))
         {
             var disclosureHeaders = new List<string>();
             if (response.Headers.Server.Count > 0)
+            {
                 disclosureHeaders.Add("Server");
+            }
+
             if (response.Headers.Contains("X-Powered-By"))
+            {
                 disclosureHeaders.Add("X-Powered-By");
+            }
+
             findings.Add(Finding("WEB-INFO-001", "Technology disclosure headers are present", ScanSeverity.Informational,
                 $"Response includes: {string.Join(", ", disclosureHeaders)}. Header values are omitted from the report.", uri.AbsolutePath, "High"));
         }
@@ -354,14 +416,22 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                 string cookieEvidence = $"Cookie #{index}; value redacted.";
 
                 if (uri.Scheme == Uri.UriSchemeHttps && !secure)
+                {
                     findings.Add(Finding("WEB-COOKIE-001", "Cookie lacks Secure attribute", ScanSeverity.Medium,
                         "A cookie was set over HTTPS without the Secure attribute.", cookieEvidence, "High"));
+                }
+
                 if (!httpOnly)
+                {
                     findings.Add(Finding("WEB-COOKIE-002", "Cookie lacks HttpOnly attribute", ScanSeverity.Low,
                         "A cookie was set without the HttpOnly attribute.", cookieEvidence, "High"));
+                }
+
                 if (!sameSite)
+                {
                     findings.Add(Finding("WEB-COOKIE-003", "Cookie lacks SameSite attribute", ScanSeverity.Low,
                         "A cookie was set without an explicit SameSite attribute.", cookieEvidence, "Medium"));
+                }
             }
         }
     }
@@ -370,7 +440,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
     {
         int limit = Math.Clamp(maxBytes, 1024, 10 * 1024 * 1024);
         if (content.Headers.ContentLength is long contentLength && contentLength > limit)
+        {
             return [];
+        }
 
         await using Stream input = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var output = new MemoryStream(Math.Min(limit, 64 * 1024));
@@ -379,7 +451,10 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
         {
             int read = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, limit - output.Length)), cancellationToken).ConfigureAwait(false);
             if (read == 0)
+            {
                 break;
+            }
+
             output.Write(buffer, 0, read);
         }
         return output.ToArray();
@@ -391,10 +466,15 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
         {
             string value = WebUtility.HtmlDecode(match.Groups[1].Value.Trim());
             if (value.Length == 0 || value.StartsWith('#') || value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
+            }
+
             if (Uri.TryCreate(pageUri, value, out Uri? candidate) &&
                 (candidate.Scheme == Uri.UriSchemeHttp || candidate.Scheme == Uri.UriSchemeHttps))
+            {
                 yield return candidate;
+            }
         }
     }
 
@@ -434,10 +514,16 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                 foreach (JsonElement server in servers.EnumerateArray())
                 {
                     if (!server.TryGetProperty("url", out JsonElement serverUrlElement) || serverUrlElement.ValueKind != JsonValueKind.String)
+                    {
                         continue;
+                    }
+
                     string? serverUrl = serverUrlElement.GetString();
                     if (serverUrl is null || serverUrl.Contains('{'))
+                    {
                         continue;
+                    }
+
                     if (Uri.TryCreate(target, serverUrl, out Uri? serverUri) && serverUri.IsAbsoluteUri &&
                         serverUri.Scheme is "http" or "https" && !WebTargetPolicy.SameOrigin(target, serverUri))
                     {
@@ -453,16 +539,23 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                 foreach (JsonProperty path in paths.EnumerateObject())
                 {
                     if (path.Value.ValueKind != JsonValueKind.Object)
+                    {
                         continue;
+                    }
+
                     foreach (JsonProperty operation in path.Value.EnumerateObject())
                     {
                         if (!IsHttpOperation(operation.Name) || operation.Value.ValueKind != JsonValueKind.Object)
+                        {
                             continue;
+                        }
 
                         operationCount++;
                         methods[operation.Name] = methods.GetValueOrDefault(operation.Name) + 1;
                         if (operation.Name is "post" or "put" or "patch" or "delete")
+                        {
                             stateChangingOperations++;
+                        }
 
                         bool operationHasSecurity = operation.Value.TryGetProperty("security", out JsonElement operationSecurity)
                             ? operationSecurity.ValueKind == JsonValueKind.Array && operationSecurity.GetArrayLength() > 0
@@ -522,7 +615,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                 {
                     string reference = property.Value.GetString() ?? string.Empty;
                     if (!reference.StartsWith("#", StringComparison.Ordinal))
+                    {
                         references.Add(reference);
+                    }
                 }
                 else
                 {
@@ -533,7 +628,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
         else if (element.ValueKind == JsonValueKind.Array)
         {
             foreach (JsonElement child in element.EnumerateArray())
+            {
                 CollectExternalReferences(child, references);
+            }
         }
     }
 
@@ -562,7 +659,10 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                         if (Uri.TryCreate(target, serverValue, out Uri? serverUri))
                         {
                             if (serverUri.IsAbsoluteUri && !WebTargetPolicy.SameOrigin(target, serverUri))
+                            {
                                 return routes;
+                            }
+
                             basePath = serverUri.AbsolutePath;
                         }
                     }
@@ -570,14 +670,21 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
             }
 
             if (!root.TryGetProperty("paths", out JsonElement paths) || paths.ValueKind != JsonValueKind.Object)
+            {
                 return routes;
+            }
 
             foreach (JsonProperty path in paths.EnumerateObject())
             {
                 if (path.Name.Contains('{') || path.Name.Contains('}') || !path.Name.StartsWith('/'))
+                {
                     continue;
+                }
+
                 if (!path.Value.TryGetProperty("get", out JsonElement operation) || operation.ValueKind != JsonValueKind.Object)
+                {
                     continue;
+                }
 
                 bool securityDeclared = operation.TryGetProperty("security", out JsonElement operationSecurity)
                     ? operationSecurity.ValueKind == JsonValueKind.Array && operationSecurity.GetArrayLength() > 0
@@ -607,9 +714,14 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
                 string prefix = basePath.TrimEnd('/');
                 string relativePath = $"{prefix}{path.Name}";
                 if (relativePath.Length == 0)
+                {
                     relativePath = "/";
+                }
+
                 if (Uri.TryCreate(target.GetLeftPart(UriPartial.Authority) + relativePath, UriKind.Absolute, out Uri? routeUri))
+                {
                     routes.Add(new OpenApiGetRoute(routeUri, securityDeclared, expectedStatusCodes, jsonSchemas));
+                }
             }
         }
         catch (JsonException)
@@ -637,18 +749,25 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
         List<string> issues)
     {
         if (issues.Count >= 5 || depth > 16 || schema.ValueKind != JsonValueKind.Object)
+        {
             return;
+        }
 
         if (schema.TryGetProperty("$ref", out JsonElement referenceElement) && referenceElement.ValueKind == JsonValueKind.String)
         {
             string reference = referenceElement.GetString() ?? string.Empty;
             if (!reference.StartsWith("#/", StringComparison.Ordinal) || !TryResolveJsonPointer(openApiRoot, reference, out JsonElement resolved))
+            {
                 return;
+            }
+
             schema = resolved;
         }
 
         if (schema.TryGetProperty("nullable", out JsonElement nullable) && nullable.ValueKind == JsonValueKind.True && actual.ValueKind == JsonValueKind.Null)
+        {
             return;
+        }
 
         if (schema.TryGetProperty("type", out JsonElement typeElement) && typeElement.ValueKind == JsonValueKind.String)
         {
@@ -673,22 +792,32 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
 
         if (schema.TryGetProperty("enum", out JsonElement enumValues) && enumValues.ValueKind == JsonValueKind.Array &&
             !enumValues.EnumerateArray().Any(value => JsonElement.DeepEquals(value, actual)))
+        {
             issues.Add(path);
+        }
 
         if (actual.ValueKind == JsonValueKind.Object)
         {
             if (schema.TryGetProperty("required", out JsonElement required) && required.ValueKind == JsonValueKind.Array)
             {
                 foreach (JsonElement requiredName in required.EnumerateArray())
+                {
                     if (requiredName.ValueKind == JsonValueKind.String && !actual.TryGetProperty(requiredName.GetString()!, out _))
+                    {
                         issues.Add($"{path}.{requiredName.GetString()}");
+                    }
+                }
             }
 
             if (schema.TryGetProperty("properties", out JsonElement properties) && properties.ValueKind == JsonValueKind.Object)
             {
                 foreach (JsonProperty property in properties.EnumerateObject())
+                {
                     if (actual.TryGetProperty(property.Name, out JsonElement propertyValue))
+                    {
                         ValidateJsonAgainstSchema(propertyValue, property.Value, openApiRoot, $"{path}.{property.Name}", depth + 1, issues);
+                    }
+                }
             }
         }
         else if (actual.ValueKind == JsonValueKind.Array && schema.TryGetProperty("items", out JsonElement items))
@@ -698,7 +827,9 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
             {
                 ValidateJsonAgainstSchema(value, items, openApiRoot, $"{path}[{index}]", depth + 1, issues);
                 if (++index >= 10 || issues.Count >= 5)
+                {
                     break;
+                }
             }
         }
     }
@@ -762,7 +893,10 @@ public sealed partial class WebScanModule(WebScannerOptions options, HttpClient 
         ];
         string? signature = signatures.FirstOrDefault(value => body.Contains(value, StringComparison.OrdinalIgnoreCase));
         if (signature is not null)
+        {
             return signature;
+        }
+
         return body.Contains("PostgreSQL", StringComparison.OrdinalIgnoreCase) &&
             body.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ? "PostgreSQL error" : string.Empty;
     }

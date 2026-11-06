@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using Core.Analysis;
 using Core.Models;
 using Core.PE;
 
@@ -10,27 +11,57 @@ public sealed class SectionParser
 {
     private const int SectionHeaderSize = 40;
 
-    public SingleSectionResult Parse(string filePath, HPInfo info)
+    public SingleSectionResult Parse(string filePath, HPInfo info, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(info);
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
             return SingleSectionResult.Fail("File not found.");
-        if (info.NumberOfSections < 0 || info.NumberOfSections > 96 || info.SectionOffset < 0)
-            return SingleSectionResult.Fail("The section table metadata is invalid.");
+        }
 
         try
         {
-            using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var reader = PeFileReader.Open(filePath);
+            return Parse(reader, info, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (IOException exception)
+        {
+            return SingleSectionResult.Fail($"Unable to read the section table: {exception.Message}");
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return SingleSectionResult.Fail($"Unable to access the PE file: {exception.Message}");
+        }
+    }
+
+    public SingleSectionResult Parse(PeFileReader reader, HPInfo info, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(info);
+        if (info.NumberOfSections < 0 || info.NumberOfSections > 96 || info.SectionOffset < 0)
+        {
+            return SingleSectionResult.Fail("The section table metadata is invalid.");
+        }
+
+        try
+        {
             int tableSize = checked(info.NumberOfSections * SectionHeaderSize);
-            if (!HeaderParser.IsRangeWithinFile(info.SectionOffset, tableSize, file.Length))
+            if (!reader.IsRangeWithinFile(info.SectionOffset, tableSize))
+            {
                 return SingleSectionResult.Fail("The section table extends past the end of the file.");
+            }
 
             byte[] table = new byte[tableSize];
-            HeaderParser.ReadExactlyAt(file, info.SectionOffset, table);
+            reader.ReadExactly(info.SectionOffset, table, cancellationToken);
             var sections = new List<SingleSectionInfo>(info.NumberOfSections);
             ReadOnlySpan<byte> bytes = table;
             for (int index = 0; index < info.NumberOfSections; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 int start = index * SectionHeaderSize;
                 string name = Encoding.ASCII.GetString(bytes.Slice(start, 8)).TrimEnd('\0');
                 sections.Add(new SingleSectionInfo
@@ -45,6 +76,14 @@ public sealed class SectionParser
             }
 
             return SingleSectionResult.Success(sections);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (EndOfStreamException)
+        {
+            return SingleSectionResult.Fail("The section table extends past the end of the file.");
         }
         catch (IOException exception)
         {

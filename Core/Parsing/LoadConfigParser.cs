@@ -1,6 +1,6 @@
+using System.Buffers.Binary;
 using Core.Analysis;
 using Core.Models;
-using System.Buffers.Binary;
 
 namespace Core.Parsing;
 
@@ -13,50 +13,96 @@ public sealed class LoadConfigParser
     private const uint GuardCfFunctionTablePresent = 0x00000400;
 
     /// <summary>Parse load config directory.</summary>
-    public LoadConfigInfo? Parse(string filePath, HPInfo header, IReadOnlyList<SingleSectionInfo> sections)
+    public LoadConfigInfo? Parse(
+        string filePath,
+        HPInfo header,
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
     {
         if (header.LoadConfigDirectoryRVA == 0 || header.LoadConfigDirectorySize == 0)
+        {
             return null;
+        }
 
         try
         {
-            using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var reader = PeFileReader.Open(filePath);
+            return Parse(reader, header, sections, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public LoadConfigInfo? Parse(
+        PeFileReader reader,
+        HPInfo header,
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(header);
+        ArgumentNullException.ThrowIfNull(sections);
+
+        if (header.LoadConfigDirectoryRVA == 0 || header.LoadConfigDirectorySize == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!RVAConverter.TryConvertRvaToFileOffset(
                 header.LoadConfigDirectoryRVA,
                 sections,
                 header.SizeOfHeaders,
-                file.Length,
+                reader.Length,
                 out long fileOffset,
                 out _,
                 out _))
+            {
                 return null;
+            }
 
-            if (fileOffset + 4 > file.Length)
+            if (!reader.IsRangeWithinFile(fileOffset, 4))
+            {
                 return null;
+            }
 
             // Read size field (first DWORD)
-            file.Position = fileOffset;
             Span<byte> sizeBytes = stackalloc byte[4];
-            if (file.Read(sizeBytes) < 4)
-                return null;
+            reader.ReadExactly(fileOffset, sizeBytes, cancellationToken);
 
             uint size = BinaryPrimitives.ReadUInt32LittleEndian(sizeBytes);
             if (size < 64 || size > 65536) // Sanity check
+            {
                 return null;
+            }
 
             // Read the structure (limit to reasonable size)
             int readSize = Math.Min((int)size, 256);
-            byte[] data = new byte[readSize];
-            file.Position = fileOffset;
-            if (file.Read(data) < readSize)
+            if (!reader.IsRangeWithinFile(fileOffset, readSize))
+            {
                 return null;
+            }
+
+            byte[] data = new byte[readSize];
+            reader.ReadExactly(fileOffset, data, cancellationToken);
 
             // Parse based on architecture
-            if (header.IsPE32Plus)
-                return ParseLoadConfig64(data);
-            else
-                return ParseLoadConfig32(data);
+            return header.IsPE32Plus
+                ? ParseLoadConfig64(data)
+                : ParseLoadConfig32(data);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {

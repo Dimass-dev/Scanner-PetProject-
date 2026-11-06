@@ -16,7 +16,9 @@ public sealed class UnusualSubsystemRule : IRule
 
         // Standard subsystems: 2 (GUI), 3 (Console)
         if (subsystem == 2 || subsystem == 3)
+        {
             yield break;
+        }
 
         // Native (1), EFI (10-14) are unusual
         if (subsystem == 1 || (subsystem >= 10 && subsystem <= 14))

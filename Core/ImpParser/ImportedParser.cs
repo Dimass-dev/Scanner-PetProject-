@@ -1,8 +1,9 @@
 using System.Buffers.Binary;
 using System.Text;
-using Core.PE;
+using Core.Analysis;
 using Core.Models;
 using Core.Models.ImportDLL;
+using Core.PE;
 
 namespace Core.ImpParser;
 
@@ -13,40 +14,95 @@ public sealed class ImportedParser
     private const int MaximumCStringLength = 4096;
     private const int MaximumThunksPerLibrary = 65536;
     private const int MaximumImportDescriptors = 65536;
+    private const int MaximumLibraries = 4096;
+    private const int MaximumTotalFunctions = 200_000;
 
     public ImportParseResult Parse(
         string filePath,
         HPInfo info,
-        IReadOnlyList<SingleSectionInfo> sections)
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(info);
         ArgumentNullException.ThrowIfNull(sections);
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
             return ImportParseResult.Fail("File not found.");
+        }
+
         if (info.ImportDirectoryRVA == 0 && info.ImportDirectorySize == 0)
+        {
             return ImportParseResult.Success([]);
+        }
+
         if (info.ImportDirectoryRVA == 0 || info.ImportDirectorySize == 0)
+        {
             return ImportParseResult.Fail("The import directory has an RVA or size of zero, but not both.");
+        }
 
         try
         {
-            using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var reader = PeFileReader.Open(filePath);
+            return Parse(reader, info, sections, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (IOException exception)
+        {
+            return ImportParseResult.Fail($"Unable to read the import table: {exception.Message}");
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return ImportParseResult.Fail($"Unable to access the PE file: {exception.Message}");
+        }
+    }
+
+    public ImportParseResult Parse(
+        PeFileReader reader,
+        HPInfo info,
+        IReadOnlyList<SingleSectionInfo> sections,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(info);
+        ArgumentNullException.ThrowIfNull(sections);
+        if (info.ImportDirectoryRVA == 0 && info.ImportDirectorySize == 0)
+        {
+            return ImportParseResult.Success([]);
+        }
+
+        if (info.ImportDirectoryRVA == 0 || info.ImportDirectorySize == 0)
+        {
+            return ImportParseResult.Fail("The import directory has an RVA or size of zero, but not both.");
+        }
+
+        try
+        {
             var libraries = new List<ImportedDLL>();
             bool foundTerminator = false;
+            int totalFunctions = 0;
 
             ulong descriptorLimit = Math.Min(
                 (ulong)info.ImportDirectorySize / ImportDescriptorSize,
                 MaximumImportDescriptors);
             for (ulong index = 0; index < descriptorLimit; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 ulong consumed = index * ImportDescriptorSize;
                 ulong descriptorRvaValue = (ulong)info.ImportDirectoryRVA + consumed;
                 if (descriptorRvaValue > uint.MaxValue)
+                {
                     return ImportParseResult.Fail("The import descriptor RVA overflows the PE address space.");
+                }
 
-                if (!TryReadRva(file, (uint)descriptorRvaValue, ImportDescriptorSize, info, sections,
-                        out _, out byte[] descriptor, out string? mappingError))
+                if (!TryReadRva(reader, (uint)descriptorRvaValue, ImportDescriptorSize, info, sections,
+                        out _, out byte[] descriptor, out string? mappingError, cancellationToken))
+                {
                     return ImportParseResult.Fail(mappingError!);
+                }
 
                 if (descriptor.AsSpan().IndexOfAnyExcept((byte)0) < 0)
                 {
@@ -58,12 +114,24 @@ public sealed class ImportedParser
                 uint nameRva = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(12));
                 uint firstThunk = BinaryPrimitives.ReadUInt32LittleEndian(descriptor.AsSpan(16));
                 if (nameRva == 0 || (originalFirstThunk == 0 && firstThunk == 0))
+                {
                     return ImportParseResult.Fail("An import descriptor is incomplete.");
+                }
 
-                if (!TryMapRva(file, nameRva, info, sections, out long nameOffset, out long nameBytes, out mappingError))
+                if (libraries.Count >= MaximumLibraries)
+                {
+                    return ImportParseResult.Fail($"The import table exceeds the supported limit of {MaximumLibraries} libraries.");
+                }
+
+                if (!TryMapRva(reader, nameRva, info, sections, out long nameOffset, out long nameBytes, out mappingError))
+                {
                     return ImportParseResult.Fail(mappingError!);
-                if (!TryReadCString(file, nameOffset, nameBytes, out string dllName, out string? stringError))
+                }
+
+                if (!TryReadCString(reader, nameOffset, nameBytes, out string dllName, out string? stringError, cancellationToken))
+                {
                     return ImportParseResult.Fail($"Invalid imported DLL name: {stringError}");
+                }
 
                 var library = new ImportedDLL
                 {
@@ -73,14 +141,32 @@ public sealed class ImportedParser
                     FirstThunk = firstThunk
                 };
                 uint lookupTableRva = originalFirstThunk != 0 ? originalFirstThunk : firstThunk;
-                if (!TryReadThunks(file, lookupTableRva, info, sections, library, out string? thunkError))
+                if (!TryReadThunks(
+                    reader,
+                    lookupTableRva,
+                    info,
+                    sections,
+                    library,
+                    ref totalFunctions,
+                    out string? thunkError,
+                    cancellationToken))
+                {
                     return ImportParseResult.Fail($"Invalid import table for '{dllName}': {thunkError}");
+                }
+
                 libraries.Add(library);
             }
 
             if (!foundTerminator)
+            {
                 return ImportParseResult.Fail("The import descriptor table has no null terminator within its declared size or supported entry limit.");
+            }
+
             return ImportParseResult.Success(libraries);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (IOException exception)
         {
@@ -93,16 +179,20 @@ public sealed class ImportedParser
     }
 
     private static bool TryReadThunks(
-        FileStream file,
+        PeFileReader reader,
         uint tableRva,
         HPInfo info,
         IReadOnlyList<SingleSectionInfo> sections,
         ImportedDLL library,
-        out string? error)
+        ref int totalFunctions,
+        out string? error,
+        CancellationToken cancellationToken)
     {
         error = null;
-        if (!TryMapRva(file, tableRva, info, sections, out long tableOffset, out long available, out error))
+        if (!TryMapRva(reader, tableRva, info, sections, out long tableOffset, out long available, out error))
+        {
             return false;
+        }
 
         int width = info.IsPE32Plus ? 8 : 4;
         long entryCount = Math.Min(available / width, MaximumThunksPerLibrary);
@@ -110,18 +200,29 @@ public sealed class ImportedParser
         Span<byte> hintBuffer = stackalloc byte[2];
         for (long index = 0; index < entryCount; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             long entryOffset = tableOffset + index * width;
-            HeaderParser.ReadExactlyAt(file, entryOffset, entryBuffer);
+            reader.ReadExactly(entryOffset, entryBuffer, cancellationToken);
             ulong thunk = width == 8
                 ? BinaryPrimitives.ReadUInt64LittleEndian(entryBuffer)
                 : BinaryPrimitives.ReadUInt32LittleEndian(entryBuffer);
             if (thunk == 0)
+            {
                 return true;
+            }
+
+            if (totalFunctions >= MaximumTotalFunctions)
+            {
+                error = $"The import table exceeds the supported limit of {MaximumTotalFunctions} functions.";
+                return false;
+            }
 
             ulong ordinalFlag = width == 8 ? 0x8000000000000000UL : 0x80000000UL;
             if ((thunk & ordinalFlag) != 0)
             {
                 library.Functions.Add(new ImportedFunction(null, (ushort)(thunk & 0xFFFF), null));
+                totalFunctions++;
                 continue;
             }
 
@@ -137,19 +238,26 @@ public sealed class ImportedParser
                 error = "A function-name entry RVA overflows the PE address space.";
                 return false;
             }
-            if (!TryMapRva(file, functionNameRva, info, sections, out long hintOffset, out long hintBytes, out error))
+            if (!TryMapRva(reader, functionNameRva, info, sections, out long hintOffset, out long hintBytes, out error))
+            {
                 return false;
+            }
+
             if (hintBytes < 3)
             {
                 error = "A Hint/Name entry is truncated.";
                 return false;
             }
 
-            HeaderParser.ReadExactlyAt(file, hintOffset, hintBuffer);
+            reader.ReadExactly(hintOffset, hintBuffer, cancellationToken);
             ushort hint = BinaryPrimitives.ReadUInt16LittleEndian(hintBuffer);
-            if (!TryReadCString(file, hintOffset + 2, hintBytes - 2, out string functionName, out error))
+            if (!TryReadCString(reader, hintOffset + 2, hintBytes - 2, out string functionName, out error, cancellationToken))
+            {
                 return false;
+            }
+
             library.Functions.Add(new ImportedFunction(functionName, null, hint));
+            totalFunctions++;
         }
 
         error = "The thunk table has no null terminator within the file-backed section or supported entry limit.";
@@ -157,18 +265,22 @@ public sealed class ImportedParser
     }
 
     private static bool TryReadRva(
-        FileStream file,
+        PeFileReader reader,
         uint rva,
         int length,
         HPInfo info,
         IReadOnlyList<SingleSectionInfo> sections,
         out long fileOffset,
         out byte[] bytes,
-        out string? error)
+        out string? error,
+        CancellationToken cancellationToken)
     {
         bytes = [];
-        if (!TryMapRva(file, rva, info, sections, out fileOffset, out long available, out error))
+        if (!TryMapRva(reader, rva, info, sections, out fileOffset, out long available, out error))
+        {
             return false;
+        }
+
         if (available < length)
         {
             error = "An import descriptor crosses the end of its file-backed section.";
@@ -176,26 +288,27 @@ public sealed class ImportedParser
         }
 
         bytes = new byte[length];
-        HeaderParser.ReadExactlyAt(file, fileOffset, bytes);
+        reader.ReadExactly(fileOffset, bytes, cancellationToken);
         return true;
     }
 
     private static bool TryMapRva(
-        FileStream file,
+        PeFileReader reader,
         uint rva,
         HPInfo info,
         IReadOnlyList<SingleSectionInfo> sections,
         out long fileOffset,
         out long available,
         out string? error) => RVAConverter.TryConvertRvaToFileOffset(
-            rva, sections, info.SizeOfHeaders, file.Length, out fileOffset, out available, out error);
+            rva, sections, info.SizeOfHeaders, reader.Length, out fileOffset, out available, out error);
 
     private static bool TryReadCString(
-        FileStream file,
+        PeFileReader reader,
         long offset,
         long available,
         out string value,
-        out string? error)
+        out string? error,
+        CancellationToken cancellationToken)
     {
         value = string.Empty;
         error = null;
@@ -207,7 +320,7 @@ public sealed class ImportedParser
 
         int bytesToRead = (int)Math.Min(available, MaximumCStringLength + 1L);
         byte[] buffer = new byte[bytesToRead];
-        HeaderParser.ReadExactlyAt(file, offset, buffer);
+        reader.ReadExactly(offset, buffer, cancellationToken);
         int terminator = Array.IndexOf(buffer, (byte)0);
         if (terminator < 0)
         {

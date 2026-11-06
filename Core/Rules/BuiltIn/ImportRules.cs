@@ -1,5 +1,5 @@
-using Core.Scanning;
 using System.Text.RegularExpressions;
+using Core.Scanning;
 
 namespace Core.Rules.BuiltIn;
 
@@ -14,7 +14,9 @@ public sealed class InjectionApisRule : IRule
     {
         var catalog = context.Options.Catalogs.RiskyApis;
         if (!catalog.Groups.TryGetValue("injection", out var injectionGroup))
+        {
             yield break;
+        }
 
         var detectedApis = new List<string>();
 
@@ -27,7 +29,9 @@ public sealed class InjectionApisRule : IRule
                 {
                     var funcName = function.DisplayName;
                     if (MatchesApi(funcName, injectionGroup.Apis))
+                    {
                         detectedApis.Add(funcName);
+                    }
                 }
             }
         }
@@ -39,12 +43,16 @@ public sealed class InjectionApisRule : IRule
             {
                 var funcName = function.DisplayName;
                 if (MatchesApi(funcName, injectionGroup.Apis))
+                {
                     detectedApis.Add($"{funcName} (delay-load)");
+                }
             }
         }
 
         if (detectedApis.Count == 0)
+        {
             yield break;
+        }
 
         var severity = detectedApis.Count >= 3 ? ScanSeverity.Critical :
                        detectedApis.Count >= 2 ? ScanSeverity.High : ScanSeverity.Medium;
@@ -78,11 +86,15 @@ public sealed class NetworkingApisRule : IRule
     {
         var catalog = context.Options.Catalogs.RiskyApis;
         if (!catalog.Groups.TryGetValue("networking", out var group))
+        {
             yield break;
+        }
 
         var detectedApis = CollectMatchingApis(context, group.Apis);
         if (detectedApis.Count == 0)
+        {
             yield break;
+        }
 
         yield return new ScanFinding(
             RuleId: Id,
@@ -102,21 +114,29 @@ public sealed class NetworkingApisRule : IRule
         if (context.Image.Imports.IsSuccess)
         {
             foreach (var dll in context.Image.Imports.Libraries)
+            {
                 foreach (var function in dll.Functions)
                 {
                     var funcName = function.DisplayName;
                     if (MatchesAnyApi(funcName, apis))
+                    {
                         detected.Add(funcName);
+                    }
                 }
+            }
         }
 
         foreach (var dll in context.Image.DelayImports)
+        {
             foreach (var function in dll.Functions)
             {
                 var funcName = function.DisplayName;
                 if (MatchesAnyApi(funcName, apis))
+                {
                     detected.Add(funcName);
+                }
             }
+        }
 
         return detected;
     }
@@ -139,11 +159,15 @@ public sealed class PersistenceApisRule : IRule
     {
         var catalog = context.Options.Catalogs.RiskyApis;
         if (!catalog.Groups.TryGetValue("persistence", out var group))
+        {
             yield break;
+        }
 
         var detectedApis = CollectMatchingApis(context, group.Apis);
         if (detectedApis.Count == 0)
+        {
             yield break;
+        }
 
         yield return new ScanFinding(
             RuleId: Id,
@@ -163,21 +187,29 @@ public sealed class PersistenceApisRule : IRule
         if (context.Image.Imports.IsSuccess)
         {
             foreach (var dll in context.Image.Imports.Libraries)
+            {
                 foreach (var function in dll.Functions)
                 {
                     var funcName = function.DisplayName;
                     if (MatchesAnyApi(funcName, apis))
+                    {
                         detected.Add(funcName);
+                    }
                 }
+            }
         }
 
         foreach (var dll in context.Image.DelayImports)
+        {
             foreach (var function in dll.Functions)
             {
                 var funcName = function.DisplayName;
                 if (MatchesAnyApi(funcName, apis))
+                {
                     detected.Add(funcName);
+                }
             }
+        }
 
         return detected;
     }
@@ -200,11 +232,15 @@ public sealed class AntiDebugApisRule : IRule
     {
         var catalog = context.Options.Catalogs.RiskyApis;
         if (!catalog.Groups.TryGetValue("antidebug", out var group))
+        {
             yield break;
+        }
 
         var detectedApis = CollectMatchingApis(context, group.Apis);
         if (detectedApis.Count == 0)
+        {
             yield break;
+        }
 
         var severity = detectedApis.Count >= 3 ? ScanSeverity.Medium : ScanSeverity.Low;
 
@@ -226,21 +262,29 @@ public sealed class AntiDebugApisRule : IRule
         if (context.Image.Imports.IsSuccess)
         {
             foreach (var dll in context.Image.Imports.Libraries)
+            {
                 foreach (var function in dll.Functions)
                 {
                     var funcName = function.DisplayName;
                     if (MatchesAnyApi(funcName, apis))
+                    {
                         detected.Add(funcName);
+                    }
                 }
+            }
         }
 
         foreach (var dll in context.Image.DelayImports)
+        {
             foreach (var function in dll.Functions)
             {
                 var funcName = function.DisplayName;
                 if (MatchesAnyApi(funcName, apis))
+                {
                     detected.Add(funcName);
+                }
             }
+        }
 
         return detected;
     }
@@ -275,11 +319,15 @@ public sealed class DynamicResolutionRule : IRule
 
                     if (normalized.Equals("LoadLibrary", StringComparison.OrdinalIgnoreCase) ||
                         normalized.Equals("LdrLoadDll", StringComparison.OrdinalIgnoreCase))
+                    {
                         hasLoadLibrary = true;
+                    }
 
                     if (normalized.Equals("GetProcAddress", StringComparison.OrdinalIgnoreCase) ||
                         normalized.Equals("LdrGetProcedureAddress", StringComparison.OrdinalIgnoreCase))
+                    {
                         hasGetProcAddress = true;
+                    }
                 }
             }
         }
