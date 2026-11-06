@@ -21,7 +21,10 @@ internal static class Program
         Console.WriteLine("============================================================");
         Console.WriteLine($"[+] SCANNING FILE: {Path.GetFileName(filePath)}");
         if (args.Length == 0)
+        {
             Console.WriteLine($"[*] No path supplied; using default: {filePath}");
+        }
+
         Console.WriteLine("============================================================\n");
 
         // Create default PE scan module with all rules
@@ -42,7 +45,9 @@ internal static class Program
             {
                 Console.WriteLine($"[{artifact.Kind}] {artifact.Name}");
                 foreach ((string key, string value) in artifact.Properties)
+                {
                     Console.WriteLine($"  {key}: {value}");
+                }
             }
 
             if (module.Findings.Count > 0)
@@ -53,9 +58,14 @@ internal static class Program
                     Console.WriteLine($"  * [{finding.Severity}] {finding.RuleId}: {finding.Title}");
                     Console.WriteLine($"    Description: {finding.Description}");
                     if (!string.IsNullOrEmpty(finding.Evidence))
+                    {
                         Console.WriteLine($"    Evidence: {finding.Evidence}");
+                    }
+
                     if (!string.IsNullOrEmpty(finding.Recommendation))
+                    {
                         Console.WriteLine($"    Recommendation: {finding.Recommendation}");
+                    }
                 }
             }
             else
