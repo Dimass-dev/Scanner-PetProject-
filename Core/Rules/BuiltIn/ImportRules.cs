@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Core.Scanning;
 
 namespace Core.Rules.BuiltIn;
@@ -28,7 +27,7 @@ public sealed class InjectionApisRule : IRule
                 foreach (var function in dll.Functions)
                 {
                     var funcName = function.DisplayName;
-                    if (MatchesApi(funcName, injectionGroup.Apis))
+                    if (RiskyApiMatcher.MatchesAnyApi(funcName, injectionGroup.Apis))
                     {
                         detectedApis.Add(funcName);
                     }
@@ -42,7 +41,7 @@ public sealed class InjectionApisRule : IRule
             foreach (var function in dll.Functions)
             {
                 var funcName = function.DisplayName;
-                if (MatchesApi(funcName, injectionGroup.Apis))
+                if (RiskyApiMatcher.MatchesAnyApi(funcName, injectionGroup.Apis))
                 {
                     detectedApis.Add($"{funcName} (delay-load)");
                 }
@@ -68,11 +67,6 @@ public sealed class InjectionApisRule : IRule
             StandardReference: "MITRE ATT&CK T1055");
     }
 
-    private static bool MatchesApi(string function, List<string> apis)
-    {
-        string normalized = Regex.Replace(function, "[AW]$", "", RegexOptions.IgnoreCase);
-        return apis.Any(api => string.Equals(api, normalized, StringComparison.OrdinalIgnoreCase));
-    }
 }
 
 /// <summary>PE-IMP-003: Networking APIs.</summary>
@@ -90,7 +84,7 @@ public sealed class NetworkingApisRule : IRule
             yield break;
         }
 
-        var detectedApis = CollectMatchingApis(context, group.Apis);
+        var detectedApis = RiskyApiMatcher.CollectMatchingApis(context.Image, group.Apis);
         if (detectedApis.Count == 0)
         {
             yield break;
@@ -107,45 +101,6 @@ public sealed class NetworkingApisRule : IRule
             StandardReference: "MITRE ATT&CK T1071");
     }
 
-    private static List<string> CollectMatchingApis(RuleContext context, List<string> apis)
-    {
-        var detected = new List<string>();
-
-        if (context.Image.Imports.IsSuccess)
-        {
-            foreach (var dll in context.Image.Imports.Libraries)
-            {
-                foreach (var function in dll.Functions)
-                {
-                    var funcName = function.DisplayName;
-                    if (MatchesAnyApi(funcName, apis))
-                    {
-                        detected.Add(funcName);
-                    }
-                }
-            }
-        }
-
-        foreach (var dll in context.Image.DelayImports)
-        {
-            foreach (var function in dll.Functions)
-            {
-                var funcName = function.DisplayName;
-                if (MatchesAnyApi(funcName, apis))
-                {
-                    detected.Add(funcName);
-                }
-            }
-        }
-
-        return detected;
-    }
-
-    private static bool MatchesAnyApi(string function, List<string> apis)
-    {
-        string normalized = Regex.Replace(function, "[AW]$", "", RegexOptions.IgnoreCase);
-        return apis.Any(api => string.Equals(api, normalized, StringComparison.OrdinalIgnoreCase));
-    }
 }
 
 /// <summary>PE-IMP-004: Persistence APIs.</summary>
@@ -163,7 +118,7 @@ public sealed class PersistenceApisRule : IRule
             yield break;
         }
 
-        var detectedApis = CollectMatchingApis(context, group.Apis);
+        var detectedApis = RiskyApiMatcher.CollectMatchingApis(context.Image, group.Apis);
         if (detectedApis.Count == 0)
         {
             yield break;
@@ -180,45 +135,6 @@ public sealed class PersistenceApisRule : IRule
             StandardReference: "MITRE ATT&CK T1547");
     }
 
-    private static List<string> CollectMatchingApis(RuleContext context, List<string> apis)
-    {
-        var detected = new List<string>();
-
-        if (context.Image.Imports.IsSuccess)
-        {
-            foreach (var dll in context.Image.Imports.Libraries)
-            {
-                foreach (var function in dll.Functions)
-                {
-                    var funcName = function.DisplayName;
-                    if (MatchesAnyApi(funcName, apis))
-                    {
-                        detected.Add(funcName);
-                    }
-                }
-            }
-        }
-
-        foreach (var dll in context.Image.DelayImports)
-        {
-            foreach (var function in dll.Functions)
-            {
-                var funcName = function.DisplayName;
-                if (MatchesAnyApi(funcName, apis))
-                {
-                    detected.Add(funcName);
-                }
-            }
-        }
-
-        return detected;
-    }
-
-    private static bool MatchesAnyApi(string function, List<string> apis)
-    {
-        string normalized = Regex.Replace(function, "[AW]$", "", RegexOptions.IgnoreCase);
-        return apis.Any(api => string.Equals(api, normalized, StringComparison.OrdinalIgnoreCase));
-    }
 }
 
 /// <summary>PE-IMP-005: Anti-debug APIs.</summary>
@@ -236,7 +152,7 @@ public sealed class AntiDebugApisRule : IRule
             yield break;
         }
 
-        var detectedApis = CollectMatchingApis(context, group.Apis);
+        var detectedApis = RiskyApiMatcher.CollectMatchingApis(context.Image, group.Apis);
         if (detectedApis.Count == 0)
         {
             yield break;
@@ -255,45 +171,6 @@ public sealed class AntiDebugApisRule : IRule
             StandardReference: "MITRE ATT&CK T1622");
     }
 
-    private static List<string> CollectMatchingApis(RuleContext context, List<string> apis)
-    {
-        var detected = new List<string>();
-
-        if (context.Image.Imports.IsSuccess)
-        {
-            foreach (var dll in context.Image.Imports.Libraries)
-            {
-                foreach (var function in dll.Functions)
-                {
-                    var funcName = function.DisplayName;
-                    if (MatchesAnyApi(funcName, apis))
-                    {
-                        detected.Add(funcName);
-                    }
-                }
-            }
-        }
-
-        foreach (var dll in context.Image.DelayImports)
-        {
-            foreach (var function in dll.Functions)
-            {
-                var funcName = function.DisplayName;
-                if (MatchesAnyApi(funcName, apis))
-                {
-                    detected.Add(funcName);
-                }
-            }
-        }
-
-        return detected;
-    }
-
-    private static bool MatchesAnyApi(string function, List<string> apis)
-    {
-        string normalized = Regex.Replace(function, "[AW]$", "", RegexOptions.IgnoreCase);
-        return apis.Any(api => string.Equals(api, normalized, StringComparison.OrdinalIgnoreCase));
-    }
 }
 
 /// <summary>PE-IMP-006: Dynamic API resolution.</summary>
@@ -315,7 +192,7 @@ public sealed class DynamicResolutionRule : IRule
                 foreach (var function in dll.Functions)
                 {
                     var funcName = function.DisplayName;
-                    string normalized = Regex.Replace(funcName, "[AW]$", "", RegexOptions.IgnoreCase);
+                    string normalized = RiskyApiMatcher.Normalize(funcName);
 
                     if (normalized.Equals("LoadLibrary", StringComparison.OrdinalIgnoreCase) ||
                         normalized.Equals("LdrLoadDll", StringComparison.OrdinalIgnoreCase))

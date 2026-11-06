@@ -1,4 +1,5 @@
 using Core.Analysis;
+using Core.Utils;
 using Core.Models;
 
 namespace Core.Parsing;
@@ -90,7 +91,7 @@ public sealed class EntropyScanner
                 bytesRemaining -= bytesRead;
             }
 
-            double entropy = CalculateShannonEntropyFromFrequencies(frequency, availableBytes - bytesRemaining);
+            double entropy = ShannonEntropy.FromFrequencies(frequency, availableBytes - bytesRemaining);
 
             results.Add(new SectionEntropy(
                 Name: section.Name,
@@ -104,28 +105,4 @@ public sealed class EntropyScanner
         return results;
     }
 
-    /// <summary>Calculate Shannon entropy (0-8 bits per byte) from frequency counts.</summary>
-    private static double CalculateShannonEntropyFromFrequencies(ReadOnlySpan<long> frequency, long totalBytes)
-    {
-        if (totalBytes <= 0)
-        {
-            return 0.0;
-        }
-
-        double entropy = 0.0;
-        double dataLength = totalBytes;
-
-        for (int i = 0; i < 256; i++)
-        {
-            if (frequency[i] == 0)
-            {
-                continue;
-            }
-
-            double probability = frequency[i] / dataLength;
-            entropy -= probability * Math.Log2(probability);
-        }
-
-        return entropy;
-    }
 }

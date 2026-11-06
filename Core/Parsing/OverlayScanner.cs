@@ -1,4 +1,5 @@
 using Core.Analysis;
+using Core.Utils;
 using Core.Models;
 
 namespace Core.Parsing;
@@ -105,33 +106,10 @@ public sealed class OverlayScanner
                 bytesRemaining -= bytesRead;
             }
 
-            entropy = CalculateShannonEntropy(frequency, overlaySize - bytesRemaining);
+            entropy = ShannonEntropy.FromFrequencies(frequency, overlaySize - bytesRemaining);
         }
 
         return new OverlayInfo(maxSectionEnd, overlaySize, entropy);
     }
 
-    private static double CalculateShannonEntropy(ReadOnlySpan<long> frequency, long totalBytes)
-    {
-        if (totalBytes <= 0)
-        {
-            return 0.0;
-        }
-
-        double entropy = 0.0;
-        double dataLength = totalBytes;
-
-        for (int i = 0; i < 256; i++)
-        {
-            if (frequency[i] == 0)
-            {
-                continue;
-            }
-
-            double probability = frequency[i] / dataLength;
-            entropy -= probability * Math.Log2(probability);
-        }
-
-        return entropy;
-    }
 }
