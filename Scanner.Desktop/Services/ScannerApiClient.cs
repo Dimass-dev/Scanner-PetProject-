@@ -12,10 +12,10 @@ public class ScannerApiClient : IScannerApiClient
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    public ScannerApiClient(HttpClient httpClient)
+    public ScannerApiClient(HttpClient httpClient, DesktopSettings settings)
     {
         _httpClient = httpClient;
-        _httpClient.BaseAddress = new Uri("http://localhost:5290");
+        _httpClient.BaseAddress = settings.ResolveServerBaseAddress();
         _httpClient.Timeout = TimeSpan.FromMinutes(5);
 
         _jsonOptions = new JsonSerializerOptions

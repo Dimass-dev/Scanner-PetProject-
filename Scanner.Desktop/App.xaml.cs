@@ -31,6 +31,8 @@ public partial class App : Application
 
     private void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton(DesktopSettings.Load());
+        services.AddSingleton<IDialogService, DialogService>();
         services.AddHttpClient<IScannerApiClient, ScannerApiClient>();
         services.AddSingleton<MainViewModel>();
         services.AddTransient<MainWindow>();

@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -11,9 +10,14 @@ namespace Scanner.Desktop.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
+    private const int MaxHistoryEntries = 20;
+
     private readonly IScannerApiClient _apiClient;
+    private readonly IDialogService _dialogService;
+    private CancellationTokenSource? _scanCts;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelScanCommand))]
     private bool _isScanning;
 
     [ObservableProperty]
@@ -33,9 +37,10 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<ScanResult> ScanHistory { get; } = new();
 
-    public MainViewModel(IScannerApiClient apiClient)
+    public MainViewModel(IScannerApiClient apiClient, IDialogService dialogService)
     {
         _apiClient = apiClient;
+        _dialogService = dialogService;
         _ = CheckServerConnectionAsync();
     }
 
@@ -69,6 +74,12 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    [RelayCommand(CanExecute = nameof(IsScanning))]
+    private void CancelScan()
+    {
+        _scanCts?.Cancel();
+    }
+
     public async Task ScanFileAsync(string filePath)
     {
         if (IsScanning)
@@ -76,18 +87,22 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        using var cts = new CancellationTokenSource();
+        _scanCts = cts;
+
         try
         {
             IsScanning = true;
             StatusMessage = $"Scanning {Path.GetFileName(filePath)}...";
             CurrentScanResult = null;
 
-            var result = await _apiClient.ScanFileAsync(filePath);
+            var result = await _apiClient.ScanFileAsync(filePath, cts.Token);
 
             if (result != null)
             {
                 CurrentScanResult = result;
                 ScanHistory.Insert(0, result);
+                TrimHistory();
                 StatusMessage = $"Scan completed: {result.RiskLevel} risk";
             }
             else
@@ -95,14 +110,19 @@ public partial class MainViewModel : ObservableObject
                 StatusMessage = "Scan failed: No result returned";
             }
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            StatusMessage = "Scan cancelled";
+        }
         catch (Exception ex)
         {
             StatusMessage = $"Error: {ex.Message}";
-            MessageBox.Show($"Scan failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.ShowError($"Scan failed: {ex.Message}");
         }
         finally
         {
             IsScanning = false;
+            _scanCts = null;
         }
     }
 
@@ -113,13 +133,16 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        using var cts = new CancellationTokenSource();
+        _scanCts = cts;
+
         try
         {
             IsScanning = true;
             StatusMessage = $"Scanning archive {Path.GetFileName(archivePath)}...";
             CurrentArchiveResult = null;
 
-            var result = await _apiClient.ScanArchiveAsync(archivePath);
+            var result = await _apiClient.ScanArchiveAsync(archivePath, cts.Token);
 
             if (result != null)
             {
@@ -131,14 +154,19 @@ public partial class MainViewModel : ObservableObject
                 StatusMessage = "Archive scan failed: No result returned";
             }
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            StatusMessage = "Archive scan cancelled";
+        }
         catch (Exception ex)
         {
             StatusMessage = $"Error: {ex.Message}";
-            MessageBox.Show($"Archive scan failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.ShowError($"Archive scan failed: {ex.Message}");
         }
         finally
         {
             IsScanning = false;
+            _scanCts = null;
         }
     }
 
@@ -166,5 +194,13 @@ public partial class MainViewModel : ObservableObject
         CurrentScanResult = null;
         CurrentArchiveResult = null;
         StatusMessage = "History cleared";
+    }
+
+    private void TrimHistory()
+    {
+        while (ScanHistory.Count > MaxHistoryEntries)
+        {
+            ScanHistory.RemoveAt(ScanHistory.Count - 1);
+        }
     }
 }
