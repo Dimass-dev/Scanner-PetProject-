@@ -83,11 +83,16 @@ export function UploadZone({ onFileSelect, isLoading }: UploadZoneProps) {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        role="region"
+        aria-label="File upload"
+        aria-describedby="upload-help"
+        aria-busy={isLoading}
+        aria-disabled={isLoading}
       >
-        <div className="upload-icon">📁</div>
+        <div className="upload-icon" aria-hidden="true">📁</div>
         <div className="upload-text">
           {isLoading ? (
-            <p>Scanning...</p>
+            <p role="status" aria-live="polite">Scanning...</p>
           ) : (
             <>
               <p className="primary">Drag and drop a file here</p>
@@ -99,20 +104,21 @@ export function UploadZone({ onFileSelect, isLoading }: UploadZoneProps) {
                   accept=".exe,.dll,.sys,.zip"
                   disabled={isLoading}
                   className="file-input"
+                  aria-label="Choose a PE file or ZIP archive"
                 />
                 <span className="button">Choose File</span>
               </label>
             </>
           )}
         </div>
-        <div className="upload-info">
+        <div className="upload-info" id="upload-help">
           <p>Accepted: .exe, .dll, .sys, .zip</p>
           <p>Max size: 100 MB (files) / 200 MB (archives)</p>
         </div>
       </div>
       {error && (
-        <div className="upload-error">
-          <span className="error-icon">⚠️</span>
+        <div className="upload-error" role="alert">
+          <span className="error-icon" aria-hidden="true">⚠️</span>
           <span>{error}</span>
         </div>
       )}

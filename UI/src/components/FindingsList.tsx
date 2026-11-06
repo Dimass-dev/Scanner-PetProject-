@@ -10,7 +10,7 @@ const SEVERITY_ORDER = ['Critical', 'High', 'Medium', 'Low', 'Info'];
 
 export function FindingsList({ findings }: FindingsListProps) {
   const [selectedSeverity, setSelectedSeverity] = useState<string>('All');
-  const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
+  const [expandedFinding, setExpandedFinding] = useState<number | null>(null);
 
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = { All: findings.length };
@@ -40,9 +40,11 @@ export function FindingsList({ findings }: FindingsListProps) {
           {['All', ...SEVERITY_ORDER].map(severity => (
             <button
               key={severity}
+              type="button"
               className={`filter-btn ${severity.toLowerCase()} ${selectedSeverity === severity ? 'active' : ''}`}
               onClick={() => setSelectedSeverity(severity)}
               disabled={!severityCounts[severity]}
+              aria-pressed={selectedSeverity === severity}
             >
               {severity} {severityCounts[severity] ? `(${severityCounts[severity]})` : ''}
             </button>
@@ -54,59 +56,67 @@ export function FindingsList({ findings }: FindingsListProps) {
         {filteredFindings.length === 0 ? (
           <div className="no-findings">No findings for selected severity</div>
         ) : (
-          filteredFindings.map(finding => (
-            <div key={finding.ruleId} className={`finding-item ${finding.severity.toLowerCase()}`}>
-              <div
-                className="finding-summary"
-                onClick={() => setExpandedFinding(expandedFinding === finding.ruleId ? null : finding.ruleId)}
-              >
-                <div className="finding-title">
-                  <span className={`severity-badge ${finding.severity.toLowerCase()}`}>
-                    {finding.severity}
-                  </span>
-                  <span className="title-text">{finding.title}</span>
-                  <span className="rule-id">{finding.ruleId}</span>
-                </div>
-                <button className="expand-btn">
-                  {expandedFinding === finding.ruleId ? '−' : '+'}
-                </button>
-              </div>
+          filteredFindings.map((finding, index) => {
+            const isExpanded = expandedFinding === index;
+            const detailsId = `finding-details-${index}`;
 
-              {expandedFinding === finding.ruleId && (
-                <div className="finding-details">
-                  <div className="detail-section">
-                    <strong>Category:</strong> {finding.category}
+            return (
+              <div key={`${finding.ruleId}-${index}`} className={`finding-item ${finding.severity.toLowerCase()}`}>
+                <button
+                  type="button"
+                  className="finding-summary"
+                  onClick={() => setExpandedFinding(isExpanded ? null : index)}
+                  aria-expanded={isExpanded}
+                  aria-controls={detailsId}
+                >
+                  <span className="finding-title">
+                    <span className={`severity-badge ${finding.severity.toLowerCase()}`}>
+                      {finding.severity}
+                    </span>
+                    <span className="title-text">{finding.title}</span>
+                    <span className="rule-id">{finding.ruleId}</span>
+                  </span>
+                  <span className="expand-btn" aria-hidden="true">
+                    {isExpanded ? '−' : '+'}
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <div className="finding-details" id={detailsId}>
+                    <div className="detail-section">
+                      <strong>Category:</strong> {finding.category}
+                    </div>
+                    {finding.confidence && (
+                      <div className="detail-section">
+                        <strong>Confidence:</strong> {finding.confidence}
+                      </div>
+                    )}
+                    <div className="detail-section">
+                      <strong>Description:</strong>
+                      <p>{finding.description}</p>
+                    </div>
+                    {finding.evidence && (
+                      <div className="detail-section">
+                        <strong>Evidence:</strong>
+                        <code className="evidence">{finding.evidence}</code>
+                      </div>
+                    )}
+                    {finding.recommendation && (
+                      <div className="detail-section">
+                        <strong>Recommendation:</strong>
+                        <p>{finding.recommendation}</p>
+                      </div>
+                    )}
+                    {finding.standardReference && (
+                      <div className="detail-section">
+                        <strong>Reference:</strong> {finding.standardReference}
+                      </div>
+                    )}
                   </div>
-                  {finding.confidence && (
-                    <div className="detail-section">
-                      <strong>Confidence:</strong> {finding.confidence}
-                    </div>
-                  )}
-                  <div className="detail-section">
-                    <strong>Description:</strong>
-                    <p>{finding.description}</p>
-                  </div>
-                  {finding.evidence && (
-                    <div className="detail-section">
-                      <strong>Evidence:</strong>
-                      <code className="evidence">{finding.evidence}</code>
-                    </div>
-                  )}
-                  {finding.recommendation && (
-                    <div className="detail-section">
-                      <strong>Recommendation:</strong>
-                      <p>{finding.recommendation}</p>
-                    </div>
-                  )}
-                  {finding.standardReference && (
-                    <div className="detail-section">
-                      <strong>Reference:</strong> {finding.standardReference}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

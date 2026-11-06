@@ -24,6 +24,7 @@ export interface ArchiveScanResult {
 
 export interface FileResult {
   relativePath: string;
+  fileSize: number;
   status: string;
   risk: RiskScore | null;
   findings: Finding[];

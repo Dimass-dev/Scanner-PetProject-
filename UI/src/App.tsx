@@ -3,12 +3,16 @@ import { useScan } from './hooks/useScan';
 import { UploadZone } from './components/UploadZone';
 import { RiskBanner } from './components/RiskBanner';
 import { FindingsList } from './components/FindingsList';
+import { ArtifactsPanel } from './components/ArtifactsPanel';
+import { ArchiveResults } from './components/ArchiveResults';
 import { WebScanPanel } from './components/WebScanPanel';
 import { LoadTestPanel } from './components/LoadTestPanel';
 import './App.css';
 
+type ScannerView = 'files' | 'web' | 'load';
+
 function App() {
-  const [activeView, setActiveView] = useState<'files' | 'web' | 'load'>('files');
+  const [activeView, setActiveView] = useState<ScannerView>('files');
   const { isLoading, error, result, scanFile, scanArchive, abort, reset } = useScan();
 
   const handleFileSelect = async (file: File) => {
@@ -27,6 +31,12 @@ function App() {
   const singleFileResult = !isArchiveResult ? result : null;
   const archiveResult = isArchiveResult ? result : null;
 
+  const tabs: { id: ScannerView; label: string }[] = [
+    { id: 'files', label: 'PE files and ZIP' },
+    { id: 'web', label: 'Web service' },
+    { id: 'load', label: 'Load test' },
+  ];
+
   return (
     <div className="app">
       <header className="app-header">
@@ -35,97 +45,80 @@ function App() {
         <p className="disclaimer">Use only with systems you own or have permission to assess.</p>
       </header>
 
-      <nav className="scanner-tabs" aria-label="Scanner type">
-        <button className={activeView === 'files' ? 'active' : ''} onClick={() => setActiveView('files')}>PE files and ZIP</button>
-        <button className={activeView === 'web' ? 'active' : ''} onClick={() => setActiveView('web')}>Web service</button>
-        <button className={activeView === 'load' ? 'active' : ''} onClick={() => setActiveView('load')}>Load test</button>
+      <nav className="scanner-tabs" role="tablist" aria-label="Scanner type">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            id={`scanner-tab-${tab.id}`}
+            type="button"
+            role="tab"
+            aria-selected={activeView === tab.id}
+            aria-controls="scanner-panel"
+            className={activeView === tab.id ? 'active' : ''}
+            onClick={() => setActiveView(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </nav>
 
-      <main className="app-main">
+      <main
+        id="scanner-panel"
+        className="app-main"
+        role="tabpanel"
+        aria-labelledby={`scanner-tab-${activeView}`}
+        aria-busy={isLoading}
+      >
         {activeView === 'web' ? <WebScanPanel /> : activeView === 'load' ? <LoadTestPanel /> : <>
-        <UploadZone onFileSelect={handleFileSelect} isLoading={isLoading} />
+          <UploadZone onFileSelect={handleFileSelect} isLoading={isLoading} />
 
-        {isLoading && (
-          <div className="loading-state">
-            <div className="spinner"></div>
-            <p>Analyzing file...</p>
-            <button onClick={abort} className="abort-btn">Cancel</button>
-          </div>
-        )}
-
-        {error && (
-          <div className="error-state">
-            <span className="error-icon">❌</span>
-            <p>{error}</p>
-            <button onClick={reset} className="reset-btn">Try Again</button>
-          </div>
-        )}
-
-        {singleFileResult && singleFileResult.risk && (
-          <div className="results">
-            <div className="results-header">
-              <h2>{singleFileResult.fileName}</h2>
-              <button onClick={reset} className="new-scan-btn">New Scan</button>
+          {isLoading && (
+            <div className="loading-state" role="status" aria-live="polite">
+              <div className="spinner" aria-hidden="true"></div>
+              <p>Analyzing file...</p>
+              <button type="button" onClick={abort} className="abort-btn">Cancel</button>
             </div>
+          )}
 
-            <RiskBanner risk={singleFileResult.risk} />
+          {error && (
+            <div className="error-state" role="alert">
+              <span className="error-icon" aria-hidden="true">❌</span>
+              <p>{error}</p>
+              <button type="button" onClick={reset} className="reset-btn">Try Again</button>
+            </div>
+          )}
 
-            {singleFileResult.findings.length > 0 && (
-              <FindingsList findings={singleFileResult.findings} />
-            )}
+          {singleFileResult && (
+            <div className="results">
+              <div className="results-header">
+                <h2>{singleFileResult.fileName}</h2>
+                <button type="button" onClick={reset} className="new-scan-btn">New Scan</button>
+              </div>
 
-            {singleFileResult.artifacts && Object.keys(singleFileResult.artifacts).length > 0 && (
-              <div className="artifacts">
-                <h3>File Details</h3>
-                <div className="artifacts-grid">
-                  {Object.entries(singleFileResult.artifacts).map(([key, value]) => (
-                    <div key={key} className="artifact-card">
-                      <h4>{key}</h4>
-                      <pre>{JSON.stringify(value, null, 2)}</pre>
-                    </div>
-                  ))}
+              {singleFileResult.risk && <RiskBanner risk={singleFileResult.risk} />}
+
+              {singleFileResult.errors.length > 0 && (
+                <div className="file-errors" role="alert">
+                  <h3>Scan errors</h3>
+                  <ul>
+                    {singleFileResult.errors.map((scanError, index) => (
+                      <li key={`${index}-${scanError}`}>{scanError}</li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
 
-        {archiveResult && (
-          <div className="results">
-            <div className="results-header">
-              <h2>{archiveResult.archiveName}</h2>
-              <button onClick={reset} className="new-scan-btn">New Scan</button>
+              {singleFileResult.findings.length > 0 && (
+                <FindingsList findings={singleFileResult.findings} />
+              )}
+
+              <ArtifactsPanel artifacts={singleFileResult.artifacts} />
             </div>
+          )}
 
-            <div className="archive-summary">
-              <p>Extracted: {archiveResult.extractedFileCount} files</p>
-              <p>Scanned: {archiveResult.scannedFileCount} PE files</p>
-            </div>
-
-            {archiveResult.overallRisk && (
-              <RiskBanner risk={archiveResult.overallRisk} />
-            )}
-
-            {archiveResult.files.map((file, idx) => (
-              <div key={idx} className="file-result">
-                <h3>{file.relativePath}</h3>
-                {file.risk && <RiskBanner risk={file.risk} />}
-                {file.findings.length > 0 && <FindingsList findings={file.findings} />}
-              </div>
-            ))}
-
-            {archiveResult.extractionErrors.length > 0 && (
-              <div className="extraction-errors">
-                <h3>Extraction Warnings</h3>
-                <ul>
-                  {archiveResult.extractionErrors.map((err, idx) => (
-                    <li key={idx}>{err}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
+          {archiveResult && (
+            <ArchiveResults key={archiveResult.scanId} result={archiveResult} onReset={reset} />
+          )}
         </>}
       </main>
 

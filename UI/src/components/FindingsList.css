@@ -82,12 +82,23 @@
 .finding-item.info { border-left-color: #5bc0de; }
 
 .finding-summary {
+  width: 100%;
   padding: 1rem;
+  border: none;
+  background: white;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   display: flex;
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
   transition: background 0.2s;
+}
+
+.finding-summary:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
 }
 
 .finding-summary:hover {

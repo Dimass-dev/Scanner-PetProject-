@@ -3,6 +3,19 @@ import { FindingsList } from './FindingsList';
 import { RiskBanner } from './RiskBanner';
 import './WebScanPanel.css';
 
+interface RateLimitResult {
+  status: string;
+  summary: string;
+  httpStatusCodes?: number[];
+  error?: string;
+}
+
+function readErrorMessage(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('error' in value)) return null;
+  const error = (value as { error?: unknown }).error;
+  return typeof error === 'string' ? error : null;
+}
+
 interface WebScanResult {
   scanId: string;
   targetUrl: string;
@@ -50,14 +63,14 @@ export function WebScanPanel() {
         signal: nextController.signal,
       });
 
-      let data: any = null;
+      let data: unknown = null;
       try {
         data = await response.json();
       } catch {
         // non-JSON response
       }
 
-      if (!response.ok) throw new Error(data?.error ?? `HTTP ${response.status}`);
+      if (!response.ok) throw new Error(readErrorMessage(data) ?? `HTTP ${response.status}`);
       setResult(data as WebScanResult);
     } catch (cause) {
       const failure = cause as Error;
@@ -205,15 +218,16 @@ function AuthRateLimitPanel({ targetUrl }: { targetUrl: string }) {
         signal: nextController.signal,
       });
 
-      let result: any = null;
+      let result: RateLimitResult | null = null;
       try {
-        result = await response.json();
+        result = await response.json() as RateLimitResult;
       } catch {
         // non-JSON response
       }
 
-      if (!response.ok) throw new Error(result?.error ?? `HTTP ${response.status}`);
-      setMessage(`${result.status}: ${result.summary} HTTP responses: ${(result.httpStatusCodes as number[]).join(', ') || 'none'}.`);
+      if (!response.ok) throw new Error(readErrorMessage(result) ?? `HTTP ${response.status}`);
+      if (!result) throw new Error('The rate-limit check returned an empty response.');
+      setMessage(`${result.status}: ${result.summary} HTTP responses: ${(result.httpStatusCodes ?? []).join(', ') || 'none'}.`);
     } catch (cause) {
       const failure = cause as Error;
       setMessage(failure.name === 'AbortError' ? 'Rate-limit check cancelled.' : failure.message || 'Rate-limit check failed.');
