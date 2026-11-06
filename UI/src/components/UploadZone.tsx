@@ -62,16 +62,16 @@ export function UploadZone({ onFileSelect, isLoading }: UploadZoneProps) {
 
     if (isLoading) return;
 
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleFile(files[0]);
+    const file = e.dataTransfer.files.item(0);
+    if (file) {
+      handleFile(file);
     }
   }, [isLoading, handleFile]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      handleFile(files[0]);
+    const file = e.target.files?.item(0);
+    if (file) {
+      handleFile(file);
     }
     e.target.value = '';
   }, [handleFile]);

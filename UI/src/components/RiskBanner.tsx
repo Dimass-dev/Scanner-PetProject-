@@ -1,4 +1,4 @@
-import type { RiskScore } from '../hooks/useScan';
+import type { RiskScore } from '../api/types';
 import './RiskBanner.css';
 
 interface RiskBannerProps {
@@ -14,7 +14,8 @@ const RISK_COLORS: Record<string, string> = {
 };
 
 export function RiskBanner({ risk }: RiskBannerProps) {
-  const color = RISK_COLORS[risk.level] || '#666';
+  const color = RISK_COLORS[risk.level] ?? '#666';
+  const count = (key: string) => risk.counts[key] ?? 0;
 
   return (
     <div className="risk-banner" style={{ borderLeftColor: color }}>
@@ -26,20 +27,20 @@ export function RiskBanner({ risk }: RiskBannerProps) {
         Score: {risk.score}
       </div>
       <div className="risk-counts">
-        {risk.counts.critical > 0 && (
-          <span className="count critical">Critical: {risk.counts.critical}</span>
+        {count('critical') > 0 && (
+          <span className="count critical">Critical: {count('critical')}</span>
         )}
-        {risk.counts.high > 0 && (
-          <span className="count high">High: {risk.counts.high}</span>
+        {count('high') > 0 && (
+          <span className="count high">High: {count('high')}</span>
         )}
-        {risk.counts.medium > 0 && (
-          <span className="count medium">Medium: {risk.counts.medium}</span>
+        {count('medium') > 0 && (
+          <span className="count medium">Medium: {count('medium')}</span>
         )}
-        {risk.counts.low > 0 && (
-          <span className="count low">Low: {risk.counts.low}</span>
+        {count('low') > 0 && (
+          <span className="count low">Low: {count('low')}</span>
         )}
-        {risk.counts.info > 0 && (
-          <span className="count info">Info: {risk.counts.info}</span>
+        {count('info') > 0 && (
+          <span className="count info">Info: {count('info')}</span>
         )}
       </div>
     </div>

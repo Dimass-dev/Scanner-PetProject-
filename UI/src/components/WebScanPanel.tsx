@@ -1,40 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
+import { apiFetch } from '../api/client';
+import type { RateLimitResult, WebScanResult } from '../api/types';
+import { parseCount } from '../utils/parseCount';
 import { FindingsList } from './FindingsList';
 import { RiskBanner } from './RiskBanner';
 import './WebScanPanel.css';
-
-interface RateLimitResult {
-  status: string;
-  summary: string;
-  httpStatusCodes?: number[];
-  error?: string;
-}
-
-function readErrorMessage(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || !('error' in value)) return null;
-  const error = (value as { error?: unknown }).error;
-  return typeof error === 'string' ? error : null;
-}
-
-interface WebScanResult {
-  scanId: string;
-  targetUrl: string;
-  status: string;
-  risk: { level: string; score: number; counts: Record<string, number> };
-  findings: Array<{
-    ruleId: string;
-    title: string;
-    category: string;
-    severity: string;
-    description: string;
-    evidence: string | null;
-    recommendation: string | null;
-    standardReference: string | null;
-    confidence: string;
-  }>;
-  artifacts: Record<string, Record<string, string>>;
-  errors: string[];
-}
 
 export function WebScanPanel() {
   const [targetUrl, setTargetUrl] = useState('http://localhost:5173');
@@ -45,7 +15,7 @@ export function WebScanPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<WebScanResult | null>(null);
-  const [controller, setController] = useState<AbortController | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,31 +23,22 @@ export function WebScanPanel() {
     setResult(null);
     setIsLoading(true);
     const nextController = new AbortController();
-    setController(nextController);
+    controllerRef.current = nextController;
 
     try {
-      const response = await fetch('/api/scan/web', {
+      const data = await apiFetch<WebScanResult>('/api/scan/web', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetUrl, openApiDocument, enableLimitedActive, confirmedActiveTest: activeConfirmed }),
         signal: nextController.signal,
       });
-
-      let data: unknown = null;
-      try {
-        data = await response.json();
-      } catch {
-        // non-JSON response
-      }
-
-      if (!response.ok) throw new Error(readErrorMessage(data) ?? `HTTP ${response.status}`);
-      setResult(data as WebScanResult);
+      setResult(data);
     } catch (cause) {
       const failure = cause as Error;
       setError(failure.name === 'AbortError' ? 'Scan cancelled.' : failure.message || 'Web scan failed.');
     } finally {
       setIsLoading(false);
-      setController(null);
+      controllerRef.current = null;
     }
   }
 
@@ -113,7 +74,7 @@ export function WebScanPanel() {
             disabled={isLoading}
           />
           <button type="submit" disabled={isLoading || (enableLimitedActive && !activeConfirmed)}>{isLoading ? 'Scanning…' : 'Scan web target'}</button>
-          {isLoading && <button type="button" className="web-cancel" onClick={() => controller?.abort()}>Cancel</button>}
+          {isLoading && <button type="button" className="web-cancel" onClick={() => controllerRef.current?.abort()}>Cancel</button>}
         </div>
         <label className="openapi-label" htmlFor="openapi-file">OpenAPI 3.x JSON (optional)</label>
         <input
@@ -202,38 +163,28 @@ function AuthRateLimitPanel({ targetUrl }: { targetUrl: string }) {
   const [confirmed, setConfirmed] = useState(false);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [probeController, setProbeController] = useState<AbortController | null>(null);
+  const probeControllerRef = useRef<AbortController | null>(null);
 
   async function runProbe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setRunning(true);
     setMessage(null);
     const nextController = new AbortController();
-    setProbeController(nextController);
+    probeControllerRef.current = nextController;
     try {
-      const response = await fetch('/api/scan/web/auth-rate-limit', {
+      const result = await apiFetch<RateLimitResult>('/api/scan/web/auth-rate-limit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetUrl, loginPath, testUsername, attempts, confirmedControlledTestAccount: confirmed }),
         signal: nextController.signal,
       });
-
-      let result: RateLimitResult | null = null;
-      try {
-        result = await response.json() as RateLimitResult;
-      } catch {
-        // non-JSON response
-      }
-
-      if (!response.ok) throw new Error(readErrorMessage(result) ?? `HTTP ${response.status}`);
-      if (!result) throw new Error('The rate-limit check returned an empty response.');
       setMessage(`${result.status}: ${result.summary} HTTP responses: ${(result.httpStatusCodes ?? []).join(', ') || 'none'}.`);
     } catch (cause) {
       const failure = cause as Error;
       setMessage(failure.name === 'AbortError' ? 'Rate-limit check cancelled.' : failure.message || 'Rate-limit check failed.');
     } finally {
       setRunning(false);
-      setProbeController(null);
+      probeControllerRef.current = null;
     }
   }
 
@@ -247,13 +198,13 @@ function AuthRateLimitPanel({ targetUrl }: { targetUrl: string }) {
         <label htmlFor="auth-test-user">Dedicated test username</label>
         <input id="auth-test-user" required maxLength={128} value={testUsername} onChange={(event) => setTestUsername(event.target.value)} disabled={running} />
         <label htmlFor="auth-attempts">Maximum attempts (server cap: 5)</label>
-        <input id="auth-attempts" type="number" min={1} max={5} value={attempts} onChange={(event) => setAttempts(Number(event.target.value))} disabled={running} />
+        <input id="auth-attempts" type="number" min={1} max={5} value={attempts} onChange={(event) => setAttempts(parseCount(event.target.value, attempts))} disabled={running} />
         <label className="auth-confirm">
           <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={running} />
           I own this service and this is a dedicated test account; I accept that it may be temporarily locked.
         </label>
         <button type="submit" disabled={running || !confirmed}>{running ? 'Checking…' : 'Check login throttling'}</button>
-        {running && <button type="button" onClick={() => probeController?.abort()}>Cancel check</button>}
+        {running && <button type="button" onClick={() => probeControllerRef.current?.abort()}>Cancel check</button>}
       </form>
       {message && <p className="auth-probe-result" role="status">{message}</p>}
     </details>

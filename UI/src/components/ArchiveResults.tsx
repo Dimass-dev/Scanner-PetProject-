@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { ArchiveScanResult, FileResult } from '../hooks/useScan';
+import type { ArchiveScanResult, FileResult } from '../api/types';
 import { RiskBanner } from './RiskBanner';
 import { FindingsList } from './FindingsList';
 import { ArtifactsPanel } from './ArtifactsPanel';

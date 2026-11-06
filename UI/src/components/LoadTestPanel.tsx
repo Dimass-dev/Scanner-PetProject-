@@ -1,15 +1,9 @@
 import { useMemo, useState } from 'react';
+import { parseCount } from '../utils/parseCount';
 import './LoadTestPanel.css';
 
 interface K6Summary {
   metrics?: Record<string, { values?: Record<string, number> }>;
-}
-
-// Keep the previous value when the input holds a partial or non-numeric string
-// (Number('-') or Number('1e') is NaN, and NaN silently defeats range checks).
-function parseCount(raw: string, fallback: number): number {
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export function LoadTestPanel() {

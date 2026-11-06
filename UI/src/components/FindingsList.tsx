@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { Finding } from '../hooks/useScan';
+import type { Finding } from '../api/types';
 import './FindingsList.css';
 
 interface FindingsListProps {
