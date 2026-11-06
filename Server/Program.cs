@@ -131,6 +131,10 @@ app.Use(async (context, next) =>
     {
         await next();
     }
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+    {
+        // The client disconnected mid-scan; there is nobody left to answer.
+    }
     catch (Exception ex)
     {
         int statusCode = ex switch

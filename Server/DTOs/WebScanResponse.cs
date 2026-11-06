@@ -35,10 +35,12 @@ public sealed record WebScanResponse(
             finding.StandardReference,
             finding.Confidence)).ToArray();
 
-        var artifacts = report.Artifacts.ToDictionary(
-            artifact => artifact.Kind,
-            artifact => (object)artifact.Properties,
-            StringComparer.OrdinalIgnoreCase);
+        // Use the indexer so a repeated Kind overwrites the earlier entry instead of throwing.
+        var artifacts = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var artifact in report.Artifacts)
+        {
+            artifacts[artifact.Kind] = artifact.Properties;
+        }
         var errors = report.Modules
             .Where(module => module.Status == ScanStatus.Failed && module.ErrorMessage is not null)
             .Select(module => module.ErrorMessage!)
