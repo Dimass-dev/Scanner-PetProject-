@@ -15,11 +15,19 @@ public sealed class WebScanService(ScanCoordinator coordinator, WebScannerOption
         CancellationToken cancellationToken = default)
     {
         if (enableLimitedActive && !confirmedActiveTest)
+        {
             throw new InvalidOperationException("Limited active checks require explicit confirmation that this target is approved for testing.");
+        }
+
         if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out Uri? target))
+        {
             throw new InvalidOperationException("A valid HTTP(S) target URL is required.");
+        }
+
         if (!_policy.TryValidate(target, out string error))
+        {
             throw new InvalidOperationException(error);
+        }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(options.MaxScanSeconds, 1, 300)));

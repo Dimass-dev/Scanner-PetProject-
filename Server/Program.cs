@@ -1,12 +1,12 @@
+using System.Threading.RateLimiting;
 using Core.Modules;
 using Core.Scanning;
 using Core.Web;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Server.DTOs;
 using Server.Services;
-using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -241,10 +241,14 @@ app.MapPost("/api/scan/web", async (
     CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.TargetUrl))
+    {
         return Results.BadRequest(new { error = "TargetUrl is required." });
+    }
 
     if (request.OpenApiDocument?.Length > 1_048_576)
+    {
         return Results.BadRequest(new { error = "OpenAPI document exceeds the 1 MiB limit." });
+    }
 
     var report = await webScanService.ScanAsync(
         request.TargetUrl,
@@ -278,3 +282,7 @@ app.MapGet("/api/scan/health", () => Results.Ok(new
 }));
 
 app.Run();
+
+public partial class Program
+{
+}

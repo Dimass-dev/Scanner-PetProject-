@@ -88,6 +88,10 @@ public sealed class ArchiveService
                     {
                         report = await _fileScanService.ScanFileAsync(filePath, cts.Token);
                     }
+                    catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                    {
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         error = ex.Message;

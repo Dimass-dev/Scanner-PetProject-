@@ -55,7 +55,7 @@ public sealed class FileScanService
         {
             return await _coordinator.ScanAsync(target, cts.Token);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException($"Scan exceeded time limit of {_options.MaxScanSeconds} seconds");
         }

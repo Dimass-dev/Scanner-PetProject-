@@ -1,5 +1,5 @@
-using Server.Options;
 using System.IO.Compression;
+using Server.Options;
 
 namespace Server.Services;
 
@@ -154,13 +154,20 @@ public sealed class TempStorage : IDisposable
                     if (sizeExceeded)
                     {
                         if (File.Exists(fullPath))
+                        {
                             File.Delete(fullPath);
+                        }
+
                         errors.Add($"{entry.FullName}: Actual size exceeds declared size");
                     }
                     else
                     {
                         extractedFiles.Add(fullPath);
                     }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -169,6 +176,10 @@ public sealed class TempStorage : IDisposable
             }
 
             return ExtractResult.Success(extractedFiles, errors);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
