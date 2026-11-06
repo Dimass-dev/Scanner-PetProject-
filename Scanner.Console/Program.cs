@@ -1,4 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Core.Modules;
+using Core.Risk;
 using Core.Scanning;
 
 namespace Scanner.ConsoleApp;
@@ -7,31 +10,103 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
-        if (args.Length > 1)
+        string? filePath = null;
+        bool json = false;
+
+        foreach (string arg in args)
         {
-            Console.Error.WriteLine("Usage: Scanner.Console [path-to-pe-file]");
+            if (arg is "--json")
+            {
+                json = true;
+            }
+            else if (arg is "-h" or "--help")
+            {
+                PrintUsage();
+                return 2;
+            }
+            else if (filePath is null)
+            {
+                filePath = arg;
+            }
+            else
+            {
+                PrintUsage();
+                return 2;
+            }
+        }
+
+        if (filePath is null)
+        {
+            PrintUsage();
             return 2;
         }
 
-        // Keep `dotnet run` useful without arguments, matching the original demo behavior.
-        string filePath = args.Length == 1
-            ? args[0]
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "notepad.exe");
-
-        Console.WriteLine("============================================================");
-        Console.WriteLine($"[+] SCANNING FILE: {Path.GetFileName(filePath)}");
-        if (args.Length == 0)
+        if (!File.Exists(filePath))
         {
-            Console.WriteLine($"[*] No path supplied; using default: {filePath}");
+            Console.Error.WriteLine($"[-] File not found: {filePath}");
+            return 2;
         }
 
-        Console.WriteLine("============================================================\n");
+        if (!json)
+        {
+            Console.WriteLine("============================================================");
+            Console.WriteLine($"[+] SCANNING FILE: {Path.GetFileName(filePath)}");
+            Console.WriteLine("============================================================\n");
+        }
 
-        // Create default PE scan module with all rules
+        // Create default PE scan module with all rules.
         var peModule = PeScanModule.CreateDefault();
         var coordinator = new ScanCoordinator(new[] { peModule });
-        ScanReport report = await coordinator.ScanAsync(ScanTarget.ForPeFile(filePath));
 
+        using var cancellation = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            cancellation.Cancel();
+        };
+
+        ScanReport report;
+        try
+        {
+            report = await coordinator.ScanAsync(ScanTarget.ForPeFile(filePath), cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.Error.WriteLine("[-] Scan cancelled.");
+            return 1;
+        }
+
+        if (json)
+        {
+            WriteJsonReport(report);
+        }
+        else
+        {
+            WriteTextReport(report);
+        }
+
+        return report.Status == ScanStatus.Succeeded ? 0 : 1;
+    }
+
+    private static void PrintUsage()
+    {
+        Console.Error.WriteLine("Usage: Scanner.Console <path-to-pe-file> [--json]");
+        Console.Error.WriteLine("  --json  Write the scan report as JSON instead of formatted text.");
+        Console.Error.WriteLine("  -h      Show this help. Press Ctrl+C to cancel a running scan.");
+    }
+
+    private static void WriteJsonReport(ScanReport report)
+    {
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() }
+        };
+        Console.WriteLine(JsonSerializer.Serialize(report, options));
+    }
+
+    private static void WriteTextReport(ScanReport report)
+    {
         foreach (ScanModuleResult module in report.Modules)
         {
             if (module.Status != ScanStatus.Succeeded)
@@ -50,34 +125,40 @@ internal static class Program
                 }
             }
 
-            if (module.Findings.Count > 0)
+            Console.WriteLine("\n[Security Findings]");
+            if (module.Findings.Count == 0)
             {
-                Console.WriteLine("\n[Security Findings]");
-                foreach (ScanFinding finding in module.Findings)
-                {
-                    Console.WriteLine($"  * [{finding.Severity}] {finding.RuleId}: {finding.Title}");
-                    Console.WriteLine($"    Description: {finding.Description}");
-                    if (!string.IsNullOrEmpty(finding.Evidence))
-                    {
-                        Console.WriteLine($"    Evidence: {finding.Evidence}");
-                    }
+                Console.WriteLine("  No security findings detected.");
+                continue;
+            }
 
-                    if (!string.IsNullOrEmpty(finding.Recommendation))
-                    {
-                        Console.WriteLine($"    Recommendation: {finding.Recommendation}");
-                    }
+            foreach (ScanFinding finding in module.Findings)
+            {
+                Console.WriteLine($"  * [{finding.Severity}] {finding.RuleId}: {finding.Title}");
+                Console.WriteLine($"    Description: {finding.Description}");
+                if (!string.IsNullOrEmpty(finding.Evidence))
+                {
+                    Console.WriteLine($"    Evidence: {finding.Evidence}");
+                }
+
+                if (!string.IsNullOrEmpty(finding.Recommendation))
+                {
+                    Console.WriteLine($"    Recommendation: {finding.Recommendation}");
                 }
             }
-            else
-            {
-                Console.WriteLine("\n[Security Findings]");
-                Console.WriteLine("  No security findings detected.");
-            }
+        }
+
+        RiskScore risk = new RiskAssessmentEngine().Assess(report.Findings);
+        Console.WriteLine("\n[Risk Assessment]");
+        Console.WriteLine($"  Level: {risk.Level}");
+        Console.WriteLine($"  Score: {risk.Score}");
+        foreach ((ScanSeverity severity, int count) in risk.Counts.Where(pair => pair.Value > 0))
+        {
+            Console.WriteLine($"  {severity}: {count}");
         }
 
         Console.WriteLine("\n============================================================");
         Console.WriteLine(report.Status == ScanStatus.Succeeded ? "[+] SCAN COMPLETE" : "[-] SCAN FAILED");
         Console.WriteLine("============================================================");
-        return report.Status == ScanStatus.Succeeded ? 0 : 1;
     }
 }
