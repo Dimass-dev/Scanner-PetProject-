@@ -17,8 +17,8 @@ Use this tool as part of a defense-in-depth strategy, not as a replacement for p
 - **Risk Assessment**: Automated scoring based on 30+ security rules
 - **Import Analysis**: Detect suspicious API usage (process injection, networking, persistence)
 - **Entropy Detection**: Identify packed or encrypted sections
-- **Code Signing**: Verify Authenticode signatures (cross-platform)
-- **Archive Support**: Safe ZIP extraction with Zip Slip and Zip Bomb protection
+- **Code Signing**: Verify Authenticode digests cross-platform, with a `WinVerifyTrust` cross-check on Windows
+- **Archive Support**: Safe ZIP extraction with Zip Slip and Zip Bomb protection, plus per-file archive navigation in the UI
 - **REST API**: JSON-based API for integration
 - **Web UI**: Interactive interface for file analysis
 - **Web Service Baseline**: Bounded same-origin HTTP(S) checks for response headers, cookies, HTTP status and basic exposure
@@ -108,8 +108,15 @@ The platform enforces strict limits to prevent abuse and resource exhaustion:
 | Maximum archive entries | 500 |
 | Maximum compression ratio | 100:1 |
 | Maximum scan time | 120 seconds |
+| API rate limit | 10 requests / 60 seconds per client |
+| Maximum OpenAPI document | 1 MiB |
+| Maximum login-throttling attempts | 5 |
+| Maximum certificate table | 16 MiB |
+| Maximum imported libraries | 4,096 |
+| Maximum imported functions | 200,000 |
+| Maximum certificate chain errors retained | 16 |
 
-These limits are configurable via `appsettings.json`.
+Server limits are configurable via `appsettings.json`. Parser safety caps (certificate size, import counts) are fixed in `Core` to keep untrusted input bounded. The scan API only accepts loopback clients.
 
 ## Risk Scoring
 
@@ -128,22 +135,24 @@ Final risk level is determined by the highest severity finding and cumulative sc
 ```
 Scanner(PetProject)/
 ├── Core/                      # PE parsing and analysis engine
-│   ├── Analysis/             # PeImageParser, EntropyScanner, OverlayScanner
-│   ├── Parsing/              # Header, Section, Import, Certificate parsers
-│   ├── Rules/                # IRule interface and built-in rules
+│   ├── Analysis/             # PeImageParser, PeFileReader
+│   ├── PE/, Sections/, ImpParser/
+│   │                         # Header, Section, Import, Delay-import parsers
+│   ├── Parsing/              # Entropy, overlay, certificate, Authenticode
+│   ├── Rules/                # IRule interface, engine, built-in rules, catalogs
 │   ├── Risk/                 # RiskAssessmentEngine
 │   └── Scanning/             # IScanModule, ScanCoordinator
 ├── Server/                    # REST API (ASP.NET Core)
-│   ├── Endpoints/            # ScanEndpoints (file, archive, health)
-│   ├── Services/             # FileScanService, ArchiveService
+│   ├── Program.cs            # File, archive, web, and health endpoints
+│   ├── Services/             # FileScanService, ArchiveService, TempStorage
 │   ├── Options/              # ScannerOptions configuration
 │   └── DTOs/                 # API contracts
 ├── Scanner.Console/           # CLI tool
-├── Test/                      # Unit and integration tests
+├── Scanner.Desktop/           # WPF desktop client
+├── Test/                      # Unit and API integration tests
 └── UI/                        # React frontend
-    ├── src/api/              # API client
-    ├── src/components/       # UI components
-    └── src/hooks/            # React hooks
+    ├── src/components/       # Upload, findings, artifacts, archive browser
+    └── src/hooks/            # React hooks and API calls
 ```
 
 ## API Endpoints
@@ -185,9 +194,10 @@ See the generated API specification at `/openapi/v1.json` in Development.
 
 ### Testing Strategy
 
-- **Unit tests**: Synthetic PE files via helper builders
-- **Integration tests**: `WebApplicationFactory` for API endpoints
-- **Security tests**: Zip Slip, Zip Bomb, oversized files
+- **Unit tests**: Synthetic PE files, signature fixtures, rule and risk coverage
+- **Integration tests**: `WebApplicationFactory` for file, archive, health, local-only, and error paths
+- **Security tests**: Zip Slip, oversized entries/archives, certificate bounds, import budgets
+- **Reliability tests**: client cancellation vs. scan timeout
 - **Cross-platform**: CI runs on Ubuntu and Windows
 
 ### Contributing
@@ -199,12 +209,14 @@ See the generated API specification at `/openapi/v1.json` in Development.
 
 ## Roadmap
 
-- [x] Phase 0: Project hygiene and CI
-- [ ] Phase 1: Core parsing layer (PeImage aggregate)
-- [ ] Phase 2: Rules engine and risk assessment
-- [ ] Phase 3: Server API and ZIP handling
-- [ ] Phase 4: Web UI
-- [ ] Phase 5: Polish (SSE progress, export, history)
+- [x] Phase 0: Project hygiene, build settings, and CI
+- [x] Phase 1: Core parsing layer (`PeImage`, single-open reader, cancellation)
+- [x] Phase 2: Rules engine, risk assessment, mitigations, imports, entropy
+- [x] Phase 3: Server API, bounded ZIP handling, local-only scan API
+- [x] Phase 4: Web UI, desktop client, React and WPF package tabs
+- [x] Phase 5: Hardening — Authenticode digest verification, certificate/import caps, timeout/cancellation handling
+- [x] Phase 6: Test and UX polish — API integration tests, structured artifacts, archive browser, accessibility
+- [ ] Future: SSE/background progress, JSON report export, scan history, streaming ZIP parsing
 
 ## License
 

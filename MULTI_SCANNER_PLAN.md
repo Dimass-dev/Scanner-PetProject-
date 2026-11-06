@@ -308,58 +308,64 @@ src/
 
 ## 9. Фазы, задачи, DoD, оценка
 
+> **Статус реализации (2026-11):** Phase 0–4 завершены, Phase 5 — частично (hardening и UX-polish сделаны; SSE/export/history остаются future work). Полный прогон: `dotnet build -c Release`, `dotnet test -c Release` (60 тестов), `npm run build`, `npm run lint`.
+
 ### Phase 0 — Baseline & hygiene (0.5–1 день)
 
-- [ ] Починить `Test/ParseHeaderTest.cs` (ожидаемое сообщение) и убрать зависимость от `C:\Windows\...`.
-- [ ] `Directory.Build.props` (nullable, warnings), `.editorconfig`.
-- [ ] CI: `dotnet restore/build/test` (ubuntu + windows), `npm ci && npm run build && npm run lint`.
-- [ ] README: scope, «не антивирус», лимиты.
+- [x] Починить `Test/ParseHeaderTest.cs` (ожидаемое сообщение) и убрать зависимость от `C:\Windows\...`.
+- [x] `Directory.Build.props` (nullable, warnings), `.editorconfig`.
+- [x] CI: `dotnet restore/build/test` (ubuntu + windows), `npm ci && npm run build && npm run lint`.
+- [x] README: scope, «не антивирус», лимиты.
 
 **DoD:** чистый клон → CI зелёный, `dotnet test` проходит на Linux и Windows.
 
 ### Phase 1 — Core: парсинг и агрегат (2–3 дня)
 
-- [ ] `Core/Analysis/PeImageParser.cs` — один `FileStream` на файл.
-- [ ] Расширить `HPInfo` (Subsystem, EntryPoint, Timestamp, Checksum, Data Directories, IsDll).
-- [ ] `LoadConfigParser` (SafeSEH, GuardFlags) — только x86 для SafeSEH.
-- [ ] `DelayImportParser` (directory index 13).
-- [ ] `OverlayScanner`, `EntropyScanner`.
-- [ ] `CertificateParser` + `SignatureVerifier` (`SignedCms`, `X509Chain`, статусы).
-- [ ] Переписать `ImportedParser` на `Stream`+offset (без повторного открытия).
+- [x] `Core/Analysis/PeImageParser.cs` — один `FileStream`/`SafeFileHandle` на файл.
+- [x] Расширить `HPInfo` (Subsystem, EntryPoint, Timestamp, Checksum, Data Directories, IsDll).
+- [x] `LoadConfigParser` (SafeSEH, GuardFlags) — только x86 для SafeSEH.
+- [x] `DelayImportParser` (directory index 13).
+- [x] `OverlayScanner`, `EntropyScanner`.
+- [x] `CertificateParser` + Authenticode digest verification (`SignedCms`, `X509Chain`, статусы; `WinVerifyTrust` на Windows).
+- [x] Переписать `ImportedParser` на `RandomAccess`+offset (без повторного открытия).
 
 **DoD:** unit-тесты на синтетических PE (валидные/битые), нет unhandled exceptions на корпусе malformed-файлов, все парсеры покрыты bounds-проверками.
 
 ### Phase 2 — Rules + Risk (2–3 дня)
 
-- [ ] `IRule`, `RuleEngine`, `RuleContext`, `RuleOptions`.
-- [ ] JSON-каталоги: risky-apis, section-names, thresholds.
-- [ ] 25–30 правил из раздела 4.1.
-- [ ] `RiskAssessmentEngine` по алгоритму раздела 5.
-- [ ] `PeScanModule` вместо логики в `PeAnalysisModule`; Console печатает findings + risk.
+- [x] `IRule`, `RuleEngine`, `RuleContext`, `RuleOptions`.
+- [x] JSON-каталоги: risky-apis, section-names, thresholds.
+- [x] 25–30 правил из раздела 4.1.
+- [x] `RiskAssessmentEngine` по алгоритму раздела 5.
+- [x] `PeScanModule` вместо логики в `PeAnalysisModule`; Console печатает findings + risk.
 
 **DoD:** правила покрыты тестами (по одному кейсу на правило), Console показывает корректный риск на 3–5 эталонных файлах.
 
 ### Phase 3 — Server API + ZIP (2–3 дня)
 
-- [ ] Удалить `weatherforecast`; DI (парсеры, каталоги, engine, модули, coordinator).
-- [ ] `ScannerOptions` из конфига + валидация.
-- [ ] `TempStorage` (безопасная распаковка, cleanup), `FileScanService`, `ArchiveService`.
-- [ ] `ScanEndpoints` (file/archive/health), лимиты, rate limiter, error middleware.
-- [ ] OpenAPI + DTO + маппинг.
-- [ ] Integration-тесты (`WebApplicationFactory`): valid exe, zip, zip-slip, bomb, too-large, bad magic.
+- [x] Удалить `weatherforecast`; DI (парсеры, каталоги, engine, модули, coordinator).
+- [x] `ScannerOptions` из конфига + валидация.
+- [x] `TempStorage` (безопасная распаковка, cleanup), `FileScanService`, `ArchiveService`.
+- [x] `ScanEndpoints` (file/archive/health), лимиты, rate limiter, error middleware.
+- [x] OpenAPI + DTO + маппинг.
+- [x] Integration-тесты (`WebApplicationFactory`): valid exe, zip, zip-slip, entry-too-large, archive-too-large, bad magic, local-only.
 
 **DoD:** `POST /api/scan/file` и `/api/scan/archive` работают по контракту; все security-лимиты проверяются тестами.
 
 ### Phase 4 — UI (3–4 дня)
 
-- [ ] `api/client.ts`, `useScan`.
-- [ ] Upload/Banner/Tree/Findings/Mitigations/Entropy/Imports.
-- [ ] Обработка ошибок и лимитов, loading/abort.
+- [x] `api/client.ts`, `useScan`.
+- [x] Upload/Banner/Tree/Findings/Mitigations/Entropy/Imports.
+- [x] Обработка ошибок и лимитов, loading/abort.
+- [x] Structured artifacts, archive file browser, accessible tabs/findings/upload.
+- [x] WPF desktop client with PerMonitorV2 DPI, drag/drop highlighting, UI error logging.
 
 **DoD:** `npm run build`, `npm run lint` без ошибок; ручной e2e на наборе: benign exe, UPX-подобный, zip с несколькими PE, битый zip.
 
 ### Phase 5 — Polish (1–2 дня, опционально)
 
+- [x] Hardening: single-open reader, cancellation vs. timeout, certificate bounds, import budgets.
+- [x] Test/UX polish: API integration tests, Authenticode fixtures, structured artifacts, archive navigation.
 - [ ] Прогресс/SSE для больших архивов, история сканов (in-memory, без БД), экспорт JSON-отчёта, базовый i18n не нужен.
 
 **Итого: ~10–14 человеко-дней.**

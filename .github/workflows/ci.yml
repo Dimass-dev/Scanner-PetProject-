@@ -30,6 +30,10 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: dotnet build --no-restore --configuration Release
 
+    - name: Verify formatting
+      if: matrix.os == 'windows-latest'
+      run: dotnet format --verify-no-changes --no-restore
+
     - name: Test (full solution)
       if: matrix.os == 'windows-latest'
       run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
