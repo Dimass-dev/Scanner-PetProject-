@@ -163,11 +163,20 @@ public class Finding
         {
             var parts = new List<string>();
             if (!string.IsNullOrWhiteSpace(Description))
+            {
                 parts.Add(Description);
+            }
+
             if (!string.IsNullOrWhiteSpace(Evidence))
+            {
                 parts.Add($"Evidence: {Evidence}");
+            }
+
             if (!string.IsNullOrWhiteSpace(Recommendation))
+            {
                 parts.Add($"Recommendation: {Recommendation}");
+            }
+
             return parts.Count == 0 ? null : string.Join(" ", parts);
         }
     }
@@ -209,7 +218,9 @@ internal static class ArtifactReader
     private static bool ReadBool(JsonElement element, string propertyName)
     {
         if (!element.TryGetProperty(propertyName, out JsonElement value))
+        {
             return false;
+        }
 
         return value.ValueKind switch
         {

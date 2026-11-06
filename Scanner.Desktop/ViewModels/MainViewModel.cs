@@ -71,7 +71,10 @@ public partial class MainViewModel : ObservableObject
 
     public async Task ScanFileAsync(string filePath)
     {
-        if (IsScanning) return;
+        if (IsScanning)
+        {
+            return;
+        }
 
         try
         {
@@ -105,7 +108,10 @@ public partial class MainViewModel : ObservableObject
 
     public async Task ScanArchiveAsync(string archivePath)
     {
-        if (IsScanning) return;
+        if (IsScanning)
+        {
+            return;
+        }
 
         try
         {

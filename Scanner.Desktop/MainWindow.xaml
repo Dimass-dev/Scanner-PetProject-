@@ -12,8 +12,14 @@
         Width="1200"
         WindowStartupLocation="CenterScreen"
         Background="#F5F5F5"
+        Foreground="#212121"
         AllowDrop="True"
-        Drop="Window_Drop">
+        Drop="Window_Drop"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        RenderOptions.ClearTypeHint="Enabled">
 
     <Window.Resources>
         <conv:RiskLevelToColorConverter x:Key="RiskLevelToColorConverter"/>
@@ -54,14 +60,11 @@
 
         <Style x:Key="CardBorder" TargetType="Border">
             <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#E0E0E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="20"/>
             <Setter Property="Margin" Value="10"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.2"/>
-                </Setter.Value>
-            </Setter>
         </Style>
     </Window.Resources>
 
@@ -140,16 +143,15 @@
                                     <ContentPresenter x:Name="ContentSite"
                                                     ContentSource="Header"
                                                     VerticalAlignment="Center"
-                                                    HorizontalAlignment="Center"/>
+                                                    HorizontalAlignment="Center"
+                                                    TextElement.Foreground="#757575"
+                                                    TextElement.FontWeight="SemiBold"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter TargetName="Border" Property="Background" Value="#2196F3"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                        <Setter Property="FontWeight" Value="Bold"/>
-                                    </Trigger>
-                                    <Trigger Property="IsSelected" Value="False">
-                                        <Setter Property="Foreground" Value="#757575"/>
+                                        <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="White"/>
+                                        <Setter TargetName="ContentSite" Property="TextElement.FontWeight" Value="Bold"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -178,18 +180,23 @@
                                      FontWeight="Bold"
                                      Margin="0,0,0,20"/>
 
-                            <Border BorderBrush="#E0E0E0"
+                            <Border x:Name="PeDropZone"
+                                    BorderBrush="#BDBDBD"
                                     BorderThickness="2"
                                     CornerRadius="8"
                                     Padding="40"
                                     Background="#FAFAFA"
-                                    MinHeight="200">
+                                    MinHeight="200"
+                                    DragEnter="DropZone_DragEnter"
+                                    DragLeave="DropZone_DragLeave">
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock Text="📁"
                                              FontSize="48"
                                              HorizontalAlignment="Center"/>
                                     <TextBlock Text="Drag and drop PE file here"
+                                             Foreground="#212121"
                                              FontSize="14"
+                                             FontWeight="SemiBold"
                                              HorizontalAlignment="Center"
                                              Margin="0,10,0,5"/>
                                     <TextBlock Text="or"
@@ -242,6 +249,7 @@
                                                      Foreground="#757575"
                                                      FontSize="12"/>
                                             <TextBlock Text="{Binding CurrentScanResult.FileName}"
+                                                     Foreground="#212121"
                                                      FontWeight="Bold"
                                                      FontSize="14"
                                                      Margin="0,5,0,15"
@@ -251,6 +259,7 @@
                                                      Foreground="#757575"
                                                      FontSize="12"/>
                                             <TextBlock Text="{Binding CurrentScanResult.FileSize, Converter={StaticResource FileSizeConverter}}"
+                                                     Foreground="#212121"
                                                      FontWeight="Bold"
                                                      FontSize="14"
                                                      Margin="0,5"/>
@@ -275,6 +284,7 @@
                                                      Foreground="#757575"
                                                      FontSize="12"/>
                                             <TextBlock Text="{Binding CurrentScanResult.TotalScore}"
+                                                     Foreground="#212121"
                                                      FontWeight="Bold"
                                                      FontSize="24"
                                                      HorizontalAlignment="Right"/>
@@ -423,18 +433,23 @@
                                      FontWeight="Bold"
                                      Margin="0,0,0,20"/>
 
-                            <Border BorderBrush="#E0E0E0"
+                            <Border x:Name="ArchiveDropZone"
+                                    BorderBrush="#BDBDBD"
                                     BorderThickness="2"
                                     CornerRadius="8"
                                     Padding="40"
                                     Background="#FAFAFA"
-                                    MinHeight="200">
+                                    MinHeight="200"
+                                    DragEnter="DropZone_DragEnter"
+                                    DragLeave="DropZone_DragLeave">
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock Text="📦"
                                              FontSize="48"
                                              HorizontalAlignment="Center"/>
                                     <TextBlock Text="Drag and drop ZIP archive here"
+                                             Foreground="#212121"
                                              FontSize="14"
+                                             FontWeight="SemiBold"
                                              HorizontalAlignment="Center"
                                              Margin="0,10,0,5"/>
                                     <TextBlock Text="or"
